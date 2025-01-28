@@ -3,26 +3,22 @@ import json
 
 URL = 'http://13.202.113.132:8000/chat'
 def send_query(url, query, thread_id):
-    print('------')
-    print(f'User query: {query}')
-    print('------')
+    print('=================================== User Message==========================')
+    print(f'{query}')
     myobj = {'query': query,
          'thread_id': thread_id}
     r = requests.post(url, json = myobj)
     rj = r.json()
     return (rj['ai_message'])
 
-thread_id = 'user01_02'
+thread_id = 'user01_10'
 
-query = 'Do you remember my name?'
-print(send_query(URL, query, thread_id))
-'''
-query = 'Hi, Puneet here. How are you doing?' 
+query = 'Hi, how are you doing?'
 print(send_query(URL, query, thread_id))
 
-query = 'Do you still remember my name?'
+query = 'Does OpenG2P offer any benefit programs? Total how many programs are afvailable?'
 print(send_query(URL, query, thread_id))
 
-query = 'How can I apply for OpenG2P vaccination program?' 
+query = 'How do I apply for the vaccination program?'
 print(send_query(URL, query, thread_id))
-'''
+
