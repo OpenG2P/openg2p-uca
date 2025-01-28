@@ -34,6 +34,11 @@ source venv/bin/activate
 pip install vosk sounddevice pyttsx3
 ```
 
+for STS_loop_coqui.py :
+```bash
+
+pip install TTS #if this doesn't work then pip install coqui-tts
+
 4. Download and configure the Vosk model:
 ```bash
 mkdir models
