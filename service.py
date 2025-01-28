@@ -27,7 +27,3 @@ def ai_respond(user_input: UserInput):
     config = {"configurable": {"thread_id": thread_id}}
     r = get_ai_response(agent_executor, query, config)
     return {'ai_message': r.pretty_repr() }
-
-if __name__ == "__main__":
-    main()
-
