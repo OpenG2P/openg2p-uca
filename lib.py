@@ -1,5 +1,5 @@
 # Full end2end question/answer app
-# Experimenation 
+# Experimenation. 
 
 import time
 from langchain_huggingface import HuggingFaceEmbeddings
