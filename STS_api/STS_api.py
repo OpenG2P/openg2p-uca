@@ -1,3 +1,4 @@
+
 import pyttsx3
 import vosk
 import sounddevice as sd
@@ -20,14 +21,16 @@ def clean_response(response: str) -> str:
     Returns:
         str: Cleaned message without formatting characters
     """
-    
+    # Remove the header line with equals signs
     if '================================== Ai Message ==================================' in response:
-        
+        # Split by the header and take the second part
         message = response.split('================================== Ai Message ==================================')[-1]
+        # Remove any remaining equals signs
         message = message.replace('=', '')
+        # Clean up extra whitespace and newlines
         message = message.strip()
         return message
-    return response  
+    return response  # Return original if header not found
 
 def initialize_engine():
     """Initialize and configure the TTS engine"""
@@ -142,7 +145,15 @@ def speech_to_speech_loop(thread_id: str):
                 continue
 
 if __name__ == "__main__":
-    THREAD_ID = 'user01_12'
+    THREAD_ID = 'user01_10'
+    
+    try:
+        speech_to_speech_loop(THREAD_ID)
+    except KeyboardInterrupt:
+        print("\nProgram terminated by user")
+    except Exception as e:
+        print(f"\nProgram terminated due to error: {str(e)}")
+    THREAD_ID = 'user01_13'
     
     try:
         speech_to_speech_loop(THREAD_ID)
