@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 agent_executor = init_agent('all-MiniLM-L6-v2', 
                              'llama3.2', 
-                             '/home/veerendra/openg2p-uca/faiss/programs_index', 
+                             '/home/puneet/faiss/programs_index', 
                              'programs_info')
 app = FastAPI()
 
