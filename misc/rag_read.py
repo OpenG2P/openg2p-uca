@@ -4,12 +4,12 @@ from langchain_community.vectorstores import FAISS
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
-query = "As a student do I get any benefit?"
+query = "As a farmer do I get any benefit?"
 vector_store = FAISS.load_local(
     "../faiss/programs_index", embeddings, allow_dangerous_deserialization=True
 )
 
-query="Are there any schemes related to student?"
+query="Are there any schemes related to Farmer?"
 docs = vector_store.similarity_search(query)
 print(docs[0])
 
