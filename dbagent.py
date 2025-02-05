@@ -1,121 +1,32 @@
+# Full end2end question/answer app
+# Experimenation 
 from lib import *
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.messages import SystemMessage
-import sqlite3
 
-def get_program_info(query):
-    """Search for program information in the database"""
-    conn = sqlite3.connect('programs.db')
-    cursor = conn.cursor()
-    
-    # Create a search query that looks through all text fields
-    search_query = '''
-    SELECT 
-        program_name,
-        description,
-        eligibility_criteria,
-        exclusions,
-        application_procedure
-    FROM program_info
-    WHERE 
-        program_name LIKE ? OR
-        description LIKE ? OR
-        eligibility_criteria LIKE ? OR
-        exclusions LIKE ? OR
-        application_procedure LIKE ?
-    '''
-    
-    # Use wildcards for flexible matching
-    search_term = f"%{query}%"
-    cursor.execute(search_query, (search_term,) * 5)
-    
-    results = cursor.fetchall()
-    conn.close()
-    
-    if not results:
-        return "No matching programs found."
-    
-    # Format the results in a readable way
-    formatted_results = []
-    for result in results:
-        program_info = f"""
-Program: {result[0]}
-
-Description:
-{result[1]}
-
-Eligibility:
-{result[2]}
-
-Exclusions:
-{result[3]}
-
-How to Apply:
-{result[4]}
-        """
-        formatted_results.append(program_info)
-    
-    return "\n\n".join(formatted_results)
-
-def init_db_agent(llm_model="llama3.2", nthreads=4):
-    llm = load_llama(llm_model, nthreads=nthreads)
+def init_db_agent(db_path, llm_model, nthreads=4):
+    db = SQLDatabase.from_uri(f'sqlite:///{db_path}')
+    llm =  load_llama(llm_model, nthreads=nthreads)
+    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+    tools = toolkit.get_tools()
     memory = MemorySaver()
-    
-    system_prompt = '''You are a helpful government schemes advisor. Your role is to:
-    1. Understand user queries about government programs
-    2. Search the database for relevant program information
-    3. Explain eligibility criteria and benefits clearly
-    4. Guide users through application procedures
-    5. Maintain conversation context and remember user details
-    
-    Always provide clear, natural language responses focusing on:
-    - Program eligibility
-    - Benefits offered
-    - Application process
-    - Any relevant exclusions
-    
-    If you're not sure about something, say so rather than making assumptions.'''
-    
-    agent_executor = create_react_agent(llm, [], checkpointer=memory, state_modifier=system_prompt)
+    system_prompt = '''You are an agent designed to interact with a SQL database and verify identity of users. After the first message from user, ask the user for his/her user ID. The user ID is a 4 digit integer. if the number of digits of the ID and if the user gives an ID of any other length, politely tell the user that this ID is incorrect. There is not need to query the DB for such a case. After receiving user ID from user create a syntactically correct SQLite query for this ID in the 'user' table of database. The ID column in the database is called user_id. The user_id column from database must match exactly the ID provided by user. If the ID is found, ask the user his/her name and date of birth. After the user has given these, close the conversation with a happy message. If the user does not provide name and date of birth properly, just close the conversation saying you can't help much. If the ID is not found tell the user politely that the user ID was not found and close the converstation politely.  You have access to tools for interacting with the database. Only use the below tools. Only use the information returned by the below tools to construct your final answer. You MUST double check your query before executing it. Show the SQL query you executed . If you get an error while executing a query, rewrite the query and try again. DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database. To start you should ALWAYS look at the tables in the database to see what you can query. Do NOT skip this step.  Then you should query the schema of the most relevant tables. ALWAYS show the SQL query you have executed. NEVER tell the user the ID in the database, only respond in 'matched' or 'not matched''' 
+    system_message = SystemMessage(content=system_prompt)
+    agent_executor = create_react_agent(llm, tools, checkpointer=memory, state_modifier=system_message)
     return agent_executor
 
-def get_ai_response(agent_executor, query, config):
-    # First, search the database for relevant information
-    program_info = get_program_info(query)
-    
-    # Create an enhanced prompt combining the query and program information
-    enhanced_prompt = f"""Based on this information about government schemes:
-
-{program_info}
-
-Please provide a helpful response to the user's query: {query}
-Focus on explaining eligibility, benefits, and how to apply in a clear, natural way."""
-    
-    # Get response from LLM
-    llm = ChatOllama(model="llama3.2", temperature=0)
-    response = llm.invoke([HumanMessage(content=enhanced_prompt)])
-    
-    return response
-
 def main():
-    print("\n=== Government Programs Advisor ===")
-    agent_executor = init_db_agent(llm_model='llama3.2', nthreads=4)
+
+    agent_executor = init_db_agent('db/users.db','llama3.2', nthreads=4) 
     config = {"configurable": {"thread_id": "thread-1"}}
-    
-    while True:
-        print('\n==== Ask about government programs (or type "exit" to quit) ====')
-        query = input("Your query: ")
-        
-        if query.lower() == 'exit':
-            break
-        
-        try:
-            response = get_ai_response(agent_executor, query, config)
-            print("\nAdvisor:", response.content)
-        except Exception as e:
-            print(f"Error: {str(e)}")
+    while 1:
+        print('==== Say something')
+        query = input()
+        r = get_ai_response(agent_executor, query, config)
+        print(r.pretty_repr())
 
 if __name__ == "__main__":
     main()
