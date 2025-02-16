@@ -1,5 +1,5 @@
 # FastAPI based service to respond to user queries
-#
+
 from fastapi import Body, FastAPI
 from pydantic import BaseModel
 from lib import init_agent, get_ai_response
@@ -8,7 +8,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 agent_executor = init_agent('all-MiniLM-L6-v2', 
                              'llama3.2', 
-                             '/home/puneet/faiss/programs_index', 
+                             '/home/veerendra/faiss/programs_index', 
                              'programs_info')
 app = FastAPI()
 
