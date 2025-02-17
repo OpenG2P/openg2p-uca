@@ -1,5 +1,5 @@
 # Full end2end question/answer app
-# Experimenation. 
+# Experimenation 
 
 import time
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -48,3 +48,12 @@ def init_agent(embeddings_model, llm_model, faiss_index_path, tool_name, nthread
     agent_executor = create_react_agent(llm, tools, checkpointer=memory, state_modifier=system_prompt)
 
     return agent_executor
+
+def test_llama():
+    llm = load_llama('llama3.2')
+    response = llm.invoke("Who are you?")
+    print("✅ Llama response:", response)
+
+if __name__ == "__main__":
+    test_llama()
+
