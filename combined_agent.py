@@ -55,8 +55,10 @@ class CombinedProgramAgent:
 
         system_prompt = """You are a program eligibility advisor that helps users find suitable social benefit programs. Follow these steps for each query:
 
+Must follow:give the response only with respect to the content you retrieve from program_info tool and SQL tool,if the content is not there then say "I dont have any idea on that" , Do not hallucinate or give information other than the retrieved info[Highly mandatory]
+
 1. Identify the intent of the user,if it is greeting then respond naturally to greetings and casual conversation. If its related to Programs/eligibility/schemes then follow the next instructions.
-2. First, use the program_info tool to find relevant programs based on the user's situation
+2. First, use the program_info tool to find relevant programs based on the user's situation,it will return ID and Mnuemonic, use the ID to retrive the complete details from SQL which in mentioned in next step.
 3. For each potentially relevant program found, use the SQL tools to check detailed eligibility criteria
 4. Combine the information from both sources to provide a complete response that includes:
    - Program name and brief description
@@ -95,8 +97,8 @@ Remember:
 # Example usage
 def main():
     agent = CombinedProgramAgent(
-        db_path='pdb',
-        faiss_index_path='new_faiss/programs_index',
+        db_path='program_db',
+        faiss_index_path='program_db_faiss/programs_index',
         llm_model='llama3.2',
         num_threads=4
     )

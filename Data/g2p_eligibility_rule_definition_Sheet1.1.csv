@@ -1,0 +1,74 @@
+mneumonic,description,domain,sql_query
+Country104 Vulnerable Pre1980,"Group of Indians with low income and older age, who also either have limited education or are fully employed, and who either face visual impairment or are single.","[""&"", ""&"", ""&"", ""&"", 
+    (""country_id"", ""="", 104), 
+    ""|"", (""education_level"", ""="", ""primary""), (""employment_status"", ""="", ""employed_full""), 
+    ""|"", (""type_of_disability"", ""="", ""visual_impairment""), (""marital_status"", ""="", ""single""), 
+    (""annual_income"", ""="", ""below_5000""), 
+    (""birthdate"", ""<"", ""1980-01-01"")
+]","SELECT ""res_partner"".id 
+FROM ""res_partner"" 
+WHERE ((((( ""res_partner"".""country_id"" = '104')
+         AND ((""res_partner"".""education_level"" = 'primary')
+              OR (""res_partner"".""employment_status"" = 'employed_full')))
+        AND ((""res_partner"".""type_of_disability"" = 'visual_impairment')
+             OR (""res_partner"".""marital_status"" = 'single')))
+       AND (""res_partner"".""annual_income"" = 'below_5000'))
+      AND (""res_partner"".""birthdate"" < '1980-01-01'))"
+Constrained Single Masters 594,"Single individuals with a Masters degree and low income from Gujarat, who either have a low debit limit (<300) or are unemployed.","[""&"", ""&"", ""&"", ""&"", 
+    (""marital_status"", ""="", ""single""),
+    (""annual_income"", ""="", ""below_5000""),
+    (""education_level"", ""="", ""masters""),
+    ""|"",
+        (""debit_limit"", ""<"", 300),
+        (""employment_status"", ""="", ""unemployed""),
+    (""state_id"", ""="", 594)
+]","SELECT ""res_partner"".id 
+FROM ""res_partner"" 
+WHERE ((((""res_partner"".""marital_status"" = 'single')
+         AND (""res_partner"".""annual_income"" = 'below_5000'))
+        AND (""res_partner"".""education_level"" = 'masters'))
+       AND ((""res_partner"".""debit_limit"" < 300)
+            OR (""res_partner"".""employment_status"" = 'unemployed')))
+      AND (""res_partner"".""state_id"" = 594);"
+Has Disability,Records indicating the presence of a disability.,"[(""type_of_disability"", ""!="", False)]","SELECT ""res_partner"".id 
+FROM ""res_partner"" 
+WHERE type_of_disability != 'fasle'"
+Senior Married Male (Agri/Non-589),"Married males born before 1960 with an annual income of 5001-10000, who either own agricultural land or are not from Tamil Nadu.","[""&"", ""&"", ""&"", ""&"", 
+    (""birthdate"", ""<"", ""1960-01-01""), 
+    ""|"", 
+        (""type_of_land_owned"", ""="", ""agricultural""), 
+        (""state_id"", ""!="", 589), 
+    (""gender"", ""="", ""Male""), 
+    (""marital_status"", ""="", ""married""), 
+    (""annual_income"", ""="", ""5001_10000"")]","SELECT ""res_partner"".id 
+FROM ""res_partner"" 
+WHERE ((((""res_partner"".""birthdate"" < '1960-01-01')
+         AND ((""res_partner"".""type_of_land_owned"" = 'agricultural')
+              OR (""res_partner"".""state_id"" != 589)))
+        AND (""res_partner"".""gender"" = 'Male'))
+       AND (""res_partner"".""marital_status"" = 'married'))
+  AND (""res_partner"".""annual_income"" = '5001_10000');"
+Vulnerable Household with Water,Households with pregnant/lactating women and malnourished children that belong to protected groups and have water access.,"[
+    ('num_preg_lact_women', '>', 0),
+    ('num_malnourished_children', '>', 0),
+    ('belong_to_protected_groups', '=', 'yes'),
+    ('water_access', '=', 'yes'),
+]","SELECT ""res_partner"".id
+FROM ""res_partner""
+WHERE (""res_partner"".""num_preg_lact_women"" > 0)
+    AND (""res_partner"".""num_malnourished_children"" > 0)
+    AND (""res_partner"".""belong_to_protected_groups"" = 'yes')
+    AND (""res_partner"".""water_access"" = 'yes');"
+High Income Educated Homeowners,"Households that own a house and four-wheeler, have an annual income above 10,000, and hold either a bachelors or masters degree.","[
+    ('owns_house', '=', 'yes'),
+    ('owns_four_wheeler', '=', 'yes'),
+    ('annual_income', '=', 'above_10000'),
+    '|', ('education_level', '=', 'bachelors'),
+            ('education_level', '=', 'masters'),
+]","SELECT ""res_partner"".id
+FROM ""res_partner""
+WHERE (""res_partner"".""owns_house"" = 'yes')
+    AND (""res_partner"".""owns_four_wheeler"" = 'yes')
+    AND (""res_partner"".""annual_income"" = 'above_10000')
+    AND ((""res_partner"".""education_level"" = 'bachelors')
+        OR (""res_partner"".""education_level"" = 'masters'));"
