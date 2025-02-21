@@ -1,55 +1,61 @@
-# create_db.py
 import sqlite3
+import pandas as pd
 
-def create_programs_db():
-    conn = sqlite3.connect('programs.db')
+def create_program_db():
+    """
+    Creates a SQLite database 'program_db' with table 'program_info'
+    containing program eligibility criteria and related information.
+    """
+    # Create database connection
+    conn = sqlite3.connect('program_db')
     cursor = conn.cursor()
     
-    # Create the program_info table with a structured schema
+    # Create table with schema
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS program_info (
-        program_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        program_name TEXT NOT NULL,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mneumonic TEXT NOT NULL,
         description TEXT,
-        eligibility_criteria TEXT,
-        exclusions TEXT,
-        application_procedure TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        domain TEXT,
+        sql_query TEXT
     )
     ''')
     
-    # Sample data for the Kisan Samman Nidhi program
-    sample_program = {
-        'program_name': 'OpenG2P Kisan Samman Nidhi',
-        'description': 'Financial assistance program for farmer families',
-        'eligibility_criteria': 'All landholding farmers\' families, which have cultivable land holding in their names are eligible to get benefit under the scheme.',
-        'exclusions': '''The following categories of beneficiaries of higher economic status shall not be eligible:
-1. All Institutional Land holders.
-2. Farmer families in which one or more of its members belong to following categories
-3. Former and present holders of constitutional posts
-4. Former and present Ministers/State Ministers and former/present Members of LokSabha/RajyaSabha
-5. All serving or retired officers and employees of Central/State Government
-6. All superannuated/retired pensioners whose monthly pension is Rs.10,000/-or more
-7. All Persons who paid Income Tax in last assessment year
-8. Professionals like Doctors, Engineers, Lawyers registered with Professional bodies''',
-        'application_procedure': 'Visit the nearest government help centre.'
-    }
+    try:
+        # Read CSV file with proper handling of nested quotes and line endings
+        df = pd.read_csv('Data/g2p_eligibility_rule_definition_Sheet1.1.csv', 
+                        quoting=1,  # QUOTE_ALL=1
+                        escapechar='\\',
+                        encoding='utf-8')
+        
+        # Insert data from CSV
+        for _, row in df.iterrows():
+            cursor.execute('''
+            INSERT INTO program_info (mneumonic, description, domain, sql_query)
+            VALUES (?, ?, ?, ?)
+            ''', (
+                row['mneumonic'],
+                row['description'],
+                row['domain'],
+                row['sql_query']
+            ))
+        
+        # Commit changes
+        conn.commit()
+        print("Database created successfully!")
+        
+        # Verify data
+        cursor.execute("SELECT COUNT(*) FROM program_info")
+        count = cursor.fetchone()[0]
+        print(f"Total records inserted: {count}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        conn.rollback()
     
-    # Insert the sample program
-    cursor.execute('''
-    INSERT INTO program_info (
-        program_name, description, eligibility_criteria, exclusions, application_procedure
-    ) VALUES (?, ?, ?, ?, ?)
-    ''', (
-        sample_program['program_name'],
-        sample_program['description'],
-        sample_program['eligibility_criteria'],
-        sample_program['exclusions'],
-        sample_program['application_procedure']
-    ))
-    
-    conn.commit()
-    conn.close()
+    finally:
+        # Close connection
+        conn.close()
 
 if __name__ == "__main__":
-    create_programs_db()
+    create_program_db()
