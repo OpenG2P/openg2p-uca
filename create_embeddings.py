@@ -6,17 +6,18 @@ import sqlite3
 import json
 
 def fetch_programs_from_db():
-    conn = sqlite3.connect('pdb')
+    conn = sqlite3.connect('program_db')
     cursor = conn.cursor()
-    cursor.execute('SELECT pid, mneumonic, description FROM pinfo')
+    cursor.execute('SELECT id, mneumonic, description FROM program_info')
     programs = cursor.fetchall()
     conn.close()
+    print(programs)
     return programs
 
 def create_program_documents(programs):
     # Convert to langchain Document objects
     documents = []
-    for pid, mneumonic, description in programs:
+    for id, mneumonic, description in programs:
         # Combine mneumonic and description for meaningful embedding
         content = f"{mneumonic}: {description}" if description else mneumonic
         
@@ -24,11 +25,13 @@ def create_program_documents(programs):
         doc = Document(
             page_content=content,  # This is the text to be embedded
             metadata={
-                "pid": pid,
+                "id": id,
                 "mneumonic": mneumonic
             }
         )
         documents.append(doc)
+    
+    print(documents)
     return documents
 
 def create_and_save_embeddings():
@@ -41,7 +44,7 @@ def create_and_save_embeddings():
     
     # Create and save FAISS index
     vector_store = FAISS.from_documents(documents, embeddings)
-    vector_store.save_local("new_faiss/programs_index")
+    vector_store.save_local("program_db_faiss/programs_index")
 
 if __name__ == "__main__":
     create_and_save_embeddings()
