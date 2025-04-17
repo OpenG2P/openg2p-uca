@@ -315,6 +315,10 @@ class MCPServer:
             # Check if query contains a USER ID
             user_id_match = re.search(r'USER\d{3}', query)
             if user_id_match:
+                # Found USER ID in the query
+                user_id = user_id_match.group(0)
+                # Store the user_id in context
+                self.update_grievance_context(thread_id, {"user_id": user_id})
                 # User provided ID, move to verification
                 return "verification"
             else:
@@ -323,18 +327,25 @@ class MCPServer:
                 
         elif current_stage == "verification":
             # Always progress to complaint after verification
-            return "complaint"
-            
+            # But only if user_id exists in context
+            if grievance_context.get("user_id"):
+                return "complaint"
+            else:
+                # If somehow we're in verification without a user_id, go back to identification
+                return "identification"
+                
         elif current_stage == "complaint":
             # Check for status inquiry
             if any(phrase in query.lower() for phrase in ["status", "check status", "what is my status"]):
                 return "status_check"
                 
             # Check if user indicates they're done providing details
-            if any(phrase in query.lower() for phrase in ["that's all", "no more", "all done", "complete", "finished"]):
-                # If we have enough detail, move to ticket creation
-                if grievance_context["enough_detail"]:
-                    return "ticket_creation"
+            # This is the critical part that needs fixing - properly recognize "no" as a signal to create a ticket
+            done_phrases = ["no", "none", "that's all", "no more", "that is all", "nothing else", "that's it", "all done"]
+            if any(phrase == query.lower().strip() for phrase in done_phrases):
+                # Move to ticket creation regardless of enough_detail flag
+                # This matches the behavior in the original GrievanceAgent
+                return "ticket_creation"
             
             # Stay in complaint collection stage
             return "complaint"
@@ -345,7 +356,7 @@ class MCPServer:
             
         elif current_stage == "follow_up":
             # Check if user wants to report a new issue
-            if any(phrase in query.lower() for phrase in ["new issue", "another problem", "different complaint"]):
+            if any(phrase in query.lower() for phrase in ["new issue", "another problem", "different complaint", "yes", "another", "more"]):
                 return "complaint"
             else:
                 # Stay in follow-up

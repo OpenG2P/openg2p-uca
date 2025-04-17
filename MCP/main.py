@@ -5,6 +5,7 @@ import threading
 import traceback
 import logging
 import os
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -362,16 +363,10 @@ Make the user feel comfortable asking about benefit programs without being pushy
         
         # Determine current stage and next stage
         current_stage = context["grievance_context"]["stage"]
-        next_stage = self.mcp_server.determine_grievance_stage(thread_id, query)
         
-        logger.info(f"Grievance flow: {current_stage} -> {next_stage}")
-        
-        # Update grievance stage
-        self.mcp_server.update_grievance_context(thread_id, {"stage": next_stage})
-        
-        # Handle each stage
-        if next_stage == "identification":
-            # Check if query contains a USER ID
+        # Special handling for USER ID in identification stage
+        if current_stage == "identification":
+            # Check if query matches USER ID pattern
             user_id_result = self.tools.identify_user_id_tool(query)
             
             # Record tool execution
@@ -383,12 +378,13 @@ Make the user feel comfortable asking about benefit programs without being pushy
             )
             
             if user_id_result["found"]:
-                # Found a USER ID, save it and move to verification
+                # Found a USER ID, save it and set stage to verification
                 user_id = user_id_result["user_id"]
+                logger.info(f"Extracted USER ID {user_id}, moving to verification stage")
                 self.mcp_server.update_grievance_context(thread_id, {"user_id": user_id, "stage": "verification"})
                 
-                # Continue to verification
-                return self._process_grievance_query(query, thread_id, self.mcp_server.get_thread_context(thread_id))
+                # Now handle verification directly without recursion
+                return self._process_verification(user_id, thread_id, context)
             else:
                 # No USER ID found, ask for it
                 identification_prompt = """
@@ -413,378 +409,43 @@ Make the user feel comfortable asking about benefit programs without being pushy
                 # Add assistant message to conversation history
                 self.mcp_server.update_conversation_history(thread_id, "assistant", response)
                 return response
-                
-        elif next_stage == "verification":
-            # Get the user ID
+        
+        # Special handling for "no" in complaint stage - direct transition to ticket creation
+        if current_stage == "complaint" and query.lower().strip() in ["no", "none", "that's all", "no more", "that is all", "nothing else", "that's it", "all done"]:
+            logger.info(f"User indicated they're done with complaint details: '{query}'")
+            # Add this as another complaint part
+            self.mcp_server.add_complaint_part(thread_id, query)
+            # Move directly to ticket creation
+            self.mcp_server.update_grievance_context(thread_id, {"stage": "ticket_creation"})
+            # Process ticket creation
+            return self._process_ticket_creation(thread_id, self.mcp_server.get_thread_context(thread_id))
+        
+        # For non-special cases, use the normal stage determination
+        next_stage = self.mcp_server.determine_grievance_stage(thread_id, query)
+        logger.info(f"Grievance flow: {current_stage} -> {next_stage}")
+        
+        # Update grievance stage
+        self.mcp_server.update_grievance_context(thread_id, {"stage": next_stage})
+        
+        # Handle each stage appropriately (without recursion)
+        if next_stage == "verification":
+            # Get the user ID from context
             user_id = context["grievance_context"]["user_id"]
-            
-            if not user_id:
-                # This shouldn't happen, but just in case
-                logger.warning("Verification stage reached without user ID")
-                self.mcp_server.update_grievance_context(thread_id, {"stage": "identification"})
-                return self._process_grievance_query(query, thread_id, self.mcp_server.get_thread_context(thread_id))
-            
-            # Verify the user
-            verification_result = self.tools.verify_user_tool(user_id)
-            
-            # Record tool execution
-            self.mcp_server.record_tool_execution(
-                thread_id, 
-                "verify_user_tool",
-                {"user_id": user_id}, 
-                verification_result
-            )
-            
-            if verification_result["verified"]:
-                # User verified, save details and move to complaint
-                self.mcp_server.update_grievance_context(thread_id, {
-                    "user_details": verification_result["user_details"],
-                    "program_details": verification_result["program_details"],
-                    "stage": "complaint"
-                })
-                
-                # Generate verification response
-                response = self.tools.format_grievance_response_tool(
-                    "user_verification",
-                    verification_result["user_details"],
-                    verification_result["program_details"],
-                    persona=context["persona"]
-                )
-                
-                # Record tool execution
-                self.mcp_server.record_tool_execution(
-                    thread_id, 
-                    "format_grievance_response_tool",
-                    {
-                        "response_type": "user_verification",
-                        "user_details": verification_result["user_details"],
-                        "program_details": verification_result["program_details"]
-                    }, 
-                    response
-                )
-                
-                # Add assistant message to conversation history
-                self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-                return response
-            else:
-                # User not verified
-                verification_failed_prompt = f"""
-                The user provided USER ID {user_id}, but we couldn't verify it in our system.
-                
-                Please respond by:
-                1. Politely informing them that you couldn't find their USER ID in our system
-                2. Asking them to double-check their USER ID and try again
-                3. Suggesting they contact support directly if they continue to have issues
-                4. Being empathetic and understanding
-                
-                Keep your response conversational and helpful.
-                """
-                
-                logger.info("Generating verification failed response")
-                response = self.ollama.generate(
-                    self.system_prompt,
-                    verification_failed_prompt,
-                    thread_id
-                )
-                
-                # Return to identification stage
-                self.mcp_server.update_grievance_context(thread_id, {"stage": "identification"})
-                
-                # Add assistant message to conversation history
-                self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-                return response
-                
-        elif next_stage == "status_check":
-            # Get user details
-            user_id = context["grievance_context"]["user_id"]
-            user_details = context["grievance_context"]["user_details"]
-            
-            # Check status
-            status_result = self.tools.check_status_tool(user_id)
-            
-            # Record tool execution
-            self.mcp_server.record_tool_execution(
-                thread_id, 
-                "check_status_tool",
-                {"user_id": user_id}, 
-                status_result
-            )
-            
-            # Generate status response
-            if status_result["found"]:
-                response = self.tools.format_grievance_response_tool(
-                    "status_check",
-                    user_details,
-                    status_result if status_result["type"] == "program" else None,
-                    persona=context["persona"]
-                )
-            else:
-                # Status not found
-                status_not_found_prompt = f"""
-                The user asked about their status, but we couldn't retrieve it from our system.
-                
-                Please respond by:
-                1. Politely informing them that you're having trouble retrieving their status information
-                2. Assuring them that their USER ID ({user_id}) is valid in our system
-                3. Asking if they'd like to report a different issue instead
-                4. Being empathetic and apologetic about the technical difficulty
-                
-                Keep your response conversational and helpful.
-                """
-                
-                response = self.ollama.generate(
-                    self.system_prompt,
-                    status_not_found_prompt,
-                    thread_id
-                )
-            
-            # Return to complaint stage after status check
-            self.mcp_server.update_grievance_context(thread_id, {"stage": "complaint"})
-            
-            # Add assistant message to conversation history
-            self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-            return response
+            return self._process_verification(user_id, thread_id, context)
             
         elif next_stage == "complaint":
-            # Handle complaint collection
+            return self._process_complaint(query, thread_id, context)
             
-            # If this is a new complaint (not a follow-up), start fresh
-            if not context["grievance_context"].get("complaint_parts"):
-                # Add this as the first complaint part
-                self.mcp_server.add_complaint_part(thread_id, query)
-                
-                # Process the complaint
-                complaint_result = self.tools.process_complaint_tool(
-                    query, 
-                    [], 
-                    False
-                )
-                
-                # Record tool execution
-                self.mcp_server.record_tool_execution(
-                    thread_id, 
-                    "process_complaint_tool",
-                    {"complaint": query, "is_follow_up": False}, 
-                    complaint_result
-                )
-                
-                # Update grievance context with complaint analysis
-                self.mcp_server.update_grievance_context(thread_id, {
-                    "enough_detail": complaint_result["enough_detail"]
-                })
-                
-                # Generate complaint collection response
-                response = self.tools.format_grievance_response_tool(
-                    "complaint_collection",
-                    context["grievance_context"]["user_details"],
-                    context["grievance_context"]["program_details"],
-                    complaint=complaint_result["complaint"],
-                    complaint_analysis=complaint_result,
-                    persona=context["persona"]
-                )
-                
-                # Record tool execution
-                self.mcp_server.record_tool_execution(
-                    thread_id, 
-                    "format_grievance_response_tool",
-                    {
-                        "response_type": "complaint_collection",
-                        "complaint": complaint_result["complaint"]
-                    }, 
-                    response
-                )
-            else:
-                # This is a follow-up to an existing complaint
-                
-                # Check for "that's all" or similar phrases
-                done_phrases = ["that's all", "no more", "that is all", "nothing else", "that's it", "all done"]
-                if any(phrase in query.lower() for phrase in done_phrases):
-                    # User is done providing details, create a ticket
-                    self.mcp_server.update_grievance_context(thread_id, {"stage": "ticket_creation"})
-                    return self._process_grievance_query(query, thread_id, self.mcp_server.get_thread_context(thread_id))
-                
-                # Add this as another complaint part
-                self.mcp_server.add_complaint_part(thread_id, query)
-                
-                # Get all complaint parts
-                complaint_parts = context["grievance_context"]["complaint_parts"]
-                
-                # Process the complaint
-                complaint_result = self.tools.process_complaint_tool(
-                    query, 
-                    complaint_parts[:-1] if len(complaint_parts) > 1 else [], 
-                    True
-                )
-                
-                # Record tool execution
-                self.mcp_server.record_tool_execution(
-                    thread_id, 
-                    "process_complaint_tool",
-                    {"complaint": query, "is_follow_up": True}, 
-                    complaint_result
-                )
-                
-                # Update grievance context with complaint analysis
-                self.mcp_server.update_grievance_context(thread_id, {
-                    "enough_detail": complaint_result["enough_detail"]
-                })
-                
-                # Generate complaint collection response
-                response = self.tools.format_grievance_response_tool(
-                    "complaint_collection",
-                    context["grievance_context"]["user_details"],
-                    context["grievance_context"]["program_details"],
-                    complaint=complaint_result["complaint"],
-                    complaint_analysis=complaint_result,
-                    persona=context["persona"]
-                )
-                
-                # Record tool execution
-                self.mcp_server.record_tool_execution(
-                    thread_id, 
-                    "format_grievance_response_tool",
-                    {
-                        "response_type": "complaint_collection",
-                        "complaint": complaint_result["complaint"]
-                    }, 
-                    response
-                )
-            
-            # Add assistant message to conversation history
-            self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-            return response
+        elif next_stage == "status_check":
+            return self._process_status_check(thread_id, context)
             
         elif next_stage == "ticket_creation":
-            # Create a ticket with the collected complaint
-            user_id = context["grievance_context"]["user_id"]
-            program_details = context["grievance_context"]["program_details"]
-            program_id = program_details.get("program_id", 0) if program_details else 0
-            complaint_parts = context["grievance_context"]["complaint_parts"]
-            
-            # Combine all complaint parts
-            full_complaint = "\n".join(complaint_parts)
-            
-            # Create the ticket
-            ticket_result = self.tools.create_ticket_tool(
-                user_id,
-                program_id,
-                full_complaint
-            )
-            
-            # Record tool execution
-            self.mcp_server.record_tool_execution(
-                thread_id, 
-                "create_ticket_tool",
-                {
-                    "user_id": user_id,
-                    "program_id": program_id,
-                    "complaint": full_complaint
-                }, 
-                ticket_result
-            )
-            
-            # Update grievance context with ticket information
-            self.mcp_server.update_grievance_context(thread_id, {
-                "ticket_id": ticket_result.get("ticket_id"),
-                "stage": "follow_up"
-            })
-            
-            # Generate ticket creation response
-            response = self.tools.format_grievance_response_tool(
-                "ticket_creation",
-                context["grievance_context"]["user_details"],
-                context["grievance_context"]["program_details"],
-                complaint=full_complaint,
-                ticket_details=ticket_result,
-                persona=context["persona"]
-            )
-            
-            # Record tool execution
-            self.mcp_server.record_tool_execution(
-                thread_id, 
-                "format_grievance_response_tool",
-                {
-                    "response_type": "ticket_creation",
-                    "ticket_details": ticket_result
-                }, 
-                response
-            )
-            
-            # Add assistant message to conversation history
-            self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-            return response
+            return self._process_ticket_creation(thread_id, context)
             
         elif next_stage == "follow_up":
-            # Handle follow-up after ticket creation
-            
-            # Check if user wants to report a new issue
-            new_issue_phrases = ["new issue", "another problem", "different complaint", "yes", "another", "more"]
-            if any(phrase in query.lower() for phrase in new_issue_phrases):
-                # Reset grievance context but keep user information
-                user_id = context["grievance_context"]["user_id"]
-                user_details = context["grievance_context"]["user_details"]
-                program_details = context["grievance_context"]["program_details"]
-                
-                # Update grievance context for a new complaint
-                self.mcp_server.update_grievance_context(thread_id, {
-                    "active": True,
-                    "stage": "complaint",
-                    "user_id": user_id,
-                    "user_details": user_details,
-                    "program_details": program_details,
-                    "complaint_parts": [],
-                    "ticket_id": None,
-                    "enough_detail": False
-                })
-                
-                # Generate new complaint prompt
-                new_complaint_prompt = f"""
-                The user wants to report a new issue after already submitting one complaint.
-                
-                Please respond by:
-                1. Acknowledging that you're ready to help with another issue
-                2. Asking them to describe their new issue or problem
-                3. Being empathetic and supportive
-                4. Mentioning that they can provide as much detail as possible
-                
-                Keep your response conversational and helpful.
-                """
-                
-                logger.info("Generating new complaint prompt")
-                response = self.ollama.generate(
-                    self.system_prompt,
-                    new_complaint_prompt,
-                    thread_id
-                )
-            else:
-                # Generate follow-up response
-                ticket_id = context["grievance_context"]["ticket_id"]
-                
-                follow_up_prompt = f"""
-                The user has already submitted a complaint (Ticket: {ticket_id}) and is continuing the conversation.
-                
-                Please respond by:
-                1. Acknowledging their message
-                2. Reminding them that their ticket ({ticket_id}) is being processed
-                3. Asking if there's anything else they need help with
-                4. Mentioning they can check the status of their ticket later using their USER ID
-                5. Being empathetic and supportive
-                
-                Keep your response conversational and helpful.
-                """
-                
-                logger.info("Generating follow-up response")
-                response = self.ollama.generate(
-                    self.system_prompt,
-                    follow_up_prompt,
-                    thread_id
-                )
-            
-            # Add assistant message to conversation history
-            self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-            return response
+            return self._process_follow_up(query, thread_id, context)
         
-        # Default response for any unexpected state
+        # Fallback for unexpected states
         logger.warning(f"Unexpected grievance stage: {next_stage}")
         
         # Reset grievance context
@@ -809,6 +470,366 @@ Make the user feel comfortable asking about benefit programs without being pushy
             error_prompt,
             thread_id
         )
+        
+        # Add assistant message to conversation history
+        self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+        return response
+
+    def _process_verification(self, user_id: str, thread_id: str, context: Dict) -> str:
+        """Handle the verification stage of grievance processing."""
+        # Verify the user
+        verification_result = self.tools.verify_user_tool(user_id)
+        
+        # Record tool execution
+        self.mcp_server.record_tool_execution(
+            thread_id, 
+            "verify_user_tool",
+            {"user_id": user_id}, 
+            verification_result
+        )
+        
+        if verification_result["verified"]:
+            # User verified, save details and move to complaint
+            self.mcp_server.update_grievance_context(thread_id, {
+                "user_details": verification_result["user_details"],
+                "program_details": verification_result["program_details"],
+                "stage": "complaint"
+            })
+            
+            # Generate verification response
+            response = self.tools.format_grievance_response_tool(
+                "user_verification",
+                verification_result["user_details"],
+                verification_result["program_details"],
+                persona=context["persona"]
+            )
+            
+            # Record tool execution
+            self.mcp_server.record_tool_execution(
+                thread_id, 
+                "format_grievance_response_tool",
+                {
+                    "response_type": "user_verification",
+                    "user_details": verification_result["user_details"],
+                    "program_details": verification_result["program_details"]
+                }, 
+                response
+            )
+        else:
+            # User not verified
+            verification_failed_prompt = f"""
+            The user provided USER ID {user_id}, but we couldn't verify it in our system.
+            
+            Please respond by:
+            1. Politely informing them that you couldn't find their USER ID in our system
+            2. Asking them to double-check their USER ID and try again
+            3. Suggesting they contact support directly if they continue to have issues
+            4. Being empathetic and understanding
+            
+            Keep your response conversational and helpful.
+            """
+            
+            logger.info("Generating verification failed response")
+            response = self.ollama.generate(
+                self.system_prompt,
+                verification_failed_prompt,
+                thread_id
+            )
+            
+            # Return to identification stage
+            self.mcp_server.update_grievance_context(thread_id, {"stage": "identification"})
+        
+        # Add assistant message to conversation history
+        self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+        return response
+
+    def _process_complaint(self, query: str, thread_id: str, context: Dict) -> str:
+        """Handle the complaint collection stage of grievance processing."""
+        # Check for "that's all" or similar phrases, including just "no"
+        done_phrases = ["no", "none", "that's all", "no more", "that is all", "nothing else", "that's it", "all done"]
+        if query.lower().strip() in done_phrases:
+            logger.info(f"User indicated they're done with complaint details: '{query}'")
+            # User is done providing details, update stage to ticket_creation
+            self.mcp_server.update_grievance_context(thread_id, {"stage": "ticket_creation"})
+            # Process ticket creation directly without recursion
+            return self._process_ticket_creation(thread_id, self.mcp_server.get_thread_context(thread_id))
+        
+        # If this is a new complaint (not a follow-up), start fresh
+        if not context["grievance_context"].get("complaint_parts"):
+            # Add this as the first complaint part
+            self.mcp_server.add_complaint_part(thread_id, query)
+            
+            # Process the complaint
+            complaint_result = self.tools.process_complaint_tool(
+                query, 
+                [], 
+                False
+            )
+            
+            # Record tool execution
+            self.mcp_server.record_tool_execution(
+                thread_id, 
+                "process_complaint_tool",
+                {"complaint": query, "is_follow_up": False}, 
+                complaint_result
+            )
+            
+            # Update grievance context with complaint analysis
+            self.mcp_server.update_grievance_context(thread_id, {
+                "enough_detail": complaint_result["enough_detail"]
+            })
+            
+            # Generate complaint collection response
+            response = self.tools.format_grievance_response_tool(
+                "complaint_collection",
+                context["grievance_context"]["user_details"],
+                context["grievance_context"]["program_details"],
+                complaint=complaint_result["complaint"],
+                complaint_analysis=complaint_result,
+                persona=context["persona"]
+            )
+            
+            # Record tool execution
+            self.mcp_server.record_tool_execution(
+                thread_id, 
+                "format_grievance_response_tool",
+                {
+                    "response_type": "complaint_collection",
+                    "complaint": complaint_result["complaint"]
+                }, 
+                response
+            )
+        else:
+            # This is a follow-up to an existing complaint
+            
+            # Add this as another complaint part
+            self.mcp_server.add_complaint_part(thread_id, query)
+            
+            # Get all complaint parts
+            complaint_parts = context["grievance_context"]["complaint_parts"]
+            
+            # Process the complaint
+            complaint_result = self.tools.process_complaint_tool(
+                query, 
+                complaint_parts[:-1] if len(complaint_parts) > 1 else [], 
+                True
+            )
+            
+            # Record tool execution
+            self.mcp_server.record_tool_execution(
+                thread_id, 
+                "process_complaint_tool",
+                {"complaint": query, "is_follow_up": True}, 
+                complaint_result
+            )
+            
+            # Update grievance context with complaint analysis
+            self.mcp_server.update_grievance_context(thread_id, {
+                "enough_detail": complaint_result["enough_detail"]
+            })
+            
+            # Generate complaint collection response
+            response = self.tools.format_grievance_response_tool(
+                "complaint_collection",
+                context["grievance_context"]["user_details"],
+                context["grievance_context"]["program_details"],
+                complaint=complaint_result["complaint"],
+                complaint_analysis=complaint_result,
+                persona=context["persona"]
+            )
+            
+            # Record tool execution
+            self.mcp_server.record_tool_execution(
+                thread_id, 
+                "format_grievance_response_tool",
+                {
+                    "response_type": "complaint_collection",
+                    "complaint": complaint_result["complaint"]
+                }, 
+                response
+            )
+        
+        # Add assistant message to conversation history
+        self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+        return response
+
+    def _process_status_check(self, thread_id: str, context: Dict) -> str:
+        """Handle the status check stage of grievance processing."""
+        # Get user details
+        user_id = context["grievance_context"]["user_id"]
+        user_details = context["grievance_context"]["user_details"]
+        
+        # Check status
+        status_result = self.tools.check_status_tool(user_id)
+        
+        # Record tool execution
+        self.mcp_server.record_tool_execution(
+            thread_id, 
+            "check_status_tool",
+            {"user_id": user_id}, 
+            status_result
+        )
+        
+        # Generate status response
+        if status_result["found"]:
+            response = self.tools.format_grievance_response_tool(
+                "status_check",
+                user_details,
+                status_result if status_result["type"] == "program" else None,
+                persona=context["persona"]
+            )
+        else:
+            # Status not found
+            status_not_found_prompt = f"""
+            The user asked about their status, but we couldn't retrieve it from our system.
+            
+            Please respond by:
+            1. Politely informing them that you're having trouble retrieving their status information
+            2. Assuring them that their USER ID ({user_id}) is valid in our system
+            3. Asking if they'd like to report a different issue instead
+            4. Being empathetic and apologetic about the technical difficulty
+            
+            Keep your response conversational and helpful.
+            """
+            
+            response = self.ollama.generate(
+                self.system_prompt,
+                status_not_found_prompt,
+                thread_id
+            )
+        
+        # Return to complaint stage after status check
+        self.mcp_server.update_grievance_context(thread_id, {"stage": "complaint"})
+        
+        # Add assistant message to conversation history
+        self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+        return response
+
+    def _process_ticket_creation(self, thread_id: str, context: Dict) -> str:
+        """Handle the ticket creation stage of grievance processing."""
+        # Create a ticket with the collected complaint
+        user_id = context["grievance_context"]["user_id"]
+        program_details = context["grievance_context"]["program_details"]
+        program_id = program_details.get("program_id", 0) if program_details else 0
+        complaint_parts = context["grievance_context"]["complaint_parts"]
+        
+        # Combine all complaint parts
+        full_complaint = "\n".join(complaint_parts)
+        
+        # Create the ticket
+        ticket_result = self.tools.create_ticket_tool(
+            user_id,
+            program_id,
+            full_complaint
+        )
+        
+        # Record tool execution
+        self.mcp_server.record_tool_execution(
+            thread_id, 
+            "create_ticket_tool",
+            {
+                "user_id": user_id,
+                "program_id": program_id,
+                "complaint": full_complaint
+            }, 
+            ticket_result
+        )
+        
+        # Update grievance context with ticket information
+        self.mcp_server.update_grievance_context(thread_id, {
+            "ticket_id": ticket_result.get("ticket_id"),
+            "stage": "follow_up"
+        })
+        
+        # Generate ticket creation response
+        response = self.tools.format_grievance_response_tool(
+            "ticket_creation",
+            context["grievance_context"]["user_details"],
+            context["grievance_context"]["program_details"],
+            complaint=full_complaint,
+            ticket_details=ticket_result,
+            persona=context["persona"]
+        )
+        
+        # Record tool execution
+        self.mcp_server.record_tool_execution(
+            thread_id, 
+            "format_grievance_response_tool",
+            {
+                "response_type": "ticket_creation",
+                "ticket_details": ticket_result
+            }, 
+            response
+        )
+        
+        # Add assistant message to conversation history
+        self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+        return response
+
+    def _process_follow_up(self, query: str, thread_id: str, context: Dict) -> str:
+        """Handle the follow-up stage after ticket creation."""
+        # Check if user wants to report a new issue
+        new_issue_phrases = ["new issue", "another problem", "different complaint", "yes", "another", "more"]
+        if any(phrase in query.lower() for phrase in new_issue_phrases):
+            # Reset grievance context but keep user information
+            user_id = context["grievance_context"]["user_id"]
+            user_details = context["grievance_context"]["user_details"]
+            program_details = context["grievance_context"]["program_details"]
+            
+            # Update grievance context for a new complaint
+            self.mcp_server.update_grievance_context(thread_id, {
+                "active": True,
+                "stage": "complaint",
+                "user_id": user_id,
+                "user_details": user_details,
+                "program_details": program_details,
+                "complaint_parts": [],
+                "ticket_id": None,
+                "enough_detail": False
+            })
+            
+            # Generate new complaint prompt
+            new_complaint_prompt = f"""
+            The user wants to report a new issue after already submitting one complaint.
+            
+            Please respond by:
+            1. Acknowledging that you're ready to help with another issue
+            2. Asking them to describe their new issue or problem
+            3. Being empathetic and supportive
+            4. Mentioning that they can provide as much detail as possible
+            
+            Keep your response conversational and helpful.
+            """
+            
+            logger.info("Generating new complaint prompt")
+            response = self.ollama.generate(
+                self.system_prompt,
+                new_complaint_prompt,
+                thread_id
+            )
+        else:
+            # Generate follow-up response
+            ticket_id = context["grievance_context"]["ticket_id"]
+            
+            follow_up_prompt = f"""
+            The user has already submitted a complaint (Ticket: {ticket_id}) and is continuing the conversation.
+            
+            Please respond by:
+            1. Acknowledging their message
+            2. Reminding them that their ticket ({ticket_id}) is being processed
+            3. Asking if there's anything else they need help with
+            4. Mentioning they can check the status of their ticket later using their USER ID
+            5. Being empathetic and supportive
+            
+            Keep your response conversational and helpful.
+            """
+            
+            logger.info("Generating follow-up response")
+            response = self.ollama.generate(
+                self.system_prompt,
+                follow_up_prompt,
+                thread_id
+            )
         
         # Add assistant message to conversation history
         self.mcp_server.update_conversation_history(thread_id, "assistant", response)
