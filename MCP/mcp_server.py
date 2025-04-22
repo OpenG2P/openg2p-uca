@@ -147,8 +147,12 @@ class MCPServer:
         context["grievance_context"]["complaint_parts"].append(complaint)
         logger.info(f"Added complaint part for thread_id: {thread_id}")
     
-    def should_call_tools(self, thread_id: str, query: str, ollama_client) -> bool:
-        """Determine if tools should be called for a given query using prompt-based classification."""
+    def should_call_tools(self, thread_id: str, query: str, ollama_client) -> str:
+        """Determine if tools should be called for a given query using prompt-based classification.
+        
+        Returns:
+            str: "TOOLS", "CONTEXT", or "CLARIFICATION"
+        """
         context = self.get_thread_context(thread_id)
         
         # Log the current state for debugging
@@ -160,145 +164,214 @@ class MCPServer:
         # If active grievance context, we should call tools
         if context["grievance_context"]["active"]:
             logger.info("Decision: CALL TOOLS - Active grievance context")
-            return True
+            return "TOOLS"
         
         # Check for USER ID format which indicates a grievance
         user_id_match = re.search(r'USER\d{3}', query)
         if user_id_match:
             logger.info(f"Decision: CALL TOOLS - Found USER ID format: {user_id_match.group(0)}")
-            return True
-        
-        # Always call tools on the first query - UNLESS it's clearly a greeting
-        if not context["tool_execution_history"]:
-            # Use the LLM to classify if this is a greeting or actual query
-            classification_prompt = f"""
-            Please classify this user message: "{query}"
-            
-            Is this:
-            1. A simple greeting (hello, hi, hey, etc.)
-            2. A casual question not about benefits (how are you, what do you do, etc.)
-            3. A substantive query about benefits or programs
-            4. A grievance or complaint about a program
-            
-            Respond with EXACTLY ONE of these words: GREETING, CASUAL, SUBSTANTIVE, or GRIEVANCE
-            """
-            
-            classification_system_prompt = "You are a message classifier. Classify messages accurately and respond with only one word."
-            
-            try:
-                classification = ollama_client.generate(
-                    classification_system_prompt, 
-                    classification_prompt,
-                    f"{thread_id}_classifier"
-                ).strip().upper()
-                
-                logger.info(f"Message classification result: {classification}")
-                
-                # Extract just the classification word using more robust approach
-                # Use the already imported re module, don't reimport it locally
-                classification_match = re.search(r'(?:^|\n)\s*(GREETING|CASUAL|SUBSTANTIVE|GRIEVANCE)\s*(?:$|\n)', classification)
-                if classification_match:
-                    classification = classification_match.group(1).strip()
-                    logger.info(f"Found explicit classification: {classification}")
-                # Fallback: look for any of the words anywhere in the text
-                elif "GREETING" in classification:
-                    classification = "GREETING"
-                elif "CASUAL" in classification:
-                    classification = "CASUAL"
-                elif "SUBSTANTIVE" in classification:
-                    classification = "SUBSTANTIVE"
-                elif "GRIEVANCE" in classification:
-                    classification = "GRIEVANCE"
-                else:
-                    # Default to substantive if unclear
-                    classification = "SUBSTANTIVE"
-                    logger.warning("Could not determine classification, defaulting to SUBSTANTIVE")
-                
-                logger.info(f"Final classification: {classification}")
-                
-                # Make sure we're using exact string comparison, not substring matching
-                if classification == "GREETING" or classification == "CASUAL":
-                    logger.info("Decision: DON'T CALL TOOLS - Message is a greeting or casual question")
-                    return False
-                elif classification == "SUBSTANTIVE":
-                    logger.info("Decision: CALL TOOLS - First substantive query")
-                    return True
-                elif classification == "GRIEVANCE":
-                    logger.info("Decision: CALL TOOLS - Message is a grievance")
-                    # Activate grievance context
-                    self.update_grievance_context(thread_id, {"active": True, "stage": "identification"})
-                    return True
-                else:
-                    # Safety check - if we somehow got an unexpected classification
-                    logger.warning(f"Unexpected classification value: '{classification}'. Defaulting to call tools.")
-                    return True
-            except Exception as e:
-                logger.error(f"Error in classification: {e}")
-                # Default to calling tools if classification fails
-                logger.info("Decision: CALL TOOLS - Classification failed, defaulting to safety")
-                return True
-        
-        # If no programs have been retrieved yet, call tools
-        if not context["retrieved_programs"]:
-            logger.info("Decision: CALL TOOLS - No programs in context")
-            return True
-        
-        # Check for grievance-specific keywords
-        grievance_keywords = [
-            "complaint", "issue", "problem", "ticket", "grievance",
-            "not working", "broken", "error", "mistake", "wrong",
-            "failed", "delayed", "denied", "rejected", "missing"
-        ]
-        
-        if any(keyword in query.lower() for keyword in grievance_keywords):
-            logger.info("Decision: CALL TOOLS - Found grievance keywords")
             # Activate grievance context
             self.update_grievance_context(thread_id, {"active": True, "stage": "identification"})
-            return True
+            return "TOOLS"
         
-        # Use the LLM to decide if this query needs tools
-        decision_prompt = f"""
-        USER QUERY: "{query}"
+        # For EVERY message, run full classification
+        classification_prompt = f"""
+        Please classify this user message: "{query}"
         
-        CONTEXT:
-        - Programs already in context: {[p.get('name', f"Program {p.get('id')}") for p in context['retrieved_programs']]}
-        - User profile: {json.dumps(context['user_profile'])}
-        - Previous conversation: {[msg['content'] for msg in context['conversation_history'][-3:] if msg['role'] == 'user']}
+        Analyze the user's intent carefully. Which of these categories best describes it:
         
-        QUESTION: Should I call tools to get new information, or use existing context?
+        1. GREETING: Simple greetings or pleasantries (hello, hi, thanks, etc.)
+        2. CASUAL: General questions not about benefits (how are you, what can you do, etc.)
+        3. SUBSTANTIVE: Questions about benefit programs, eligibility, or application processes
+        4. GRIEVANCE: Complaints, problems with benefits, issues with applications, or requests to report problems
         
-        Consider these factors:
-        1. If the query is about programs we already have information on, use existing context
-        2. If the query is asking for completely new information, call tools
-        3. If the query is a simple follow-up or clarification, use existing context
-        4. If the query is a greeting or casual question, don't call tools
-        5. If the query seems like a complaint or grievance, call tools
-        
-        Respond with EXACTLY ONE WORD: "TOOLS" or "CONTEXT"
+        Respond with EXACTLY ONE of these words: GREETING, CASUAL, SUBSTANTIVE, or GRIEVANCE
         """
         
-        decision_system_prompt = "You are a decision support system. Make careful decisions about when to use tools vs. existing context."
+        classification_system_prompt = """You are a message classifier for a benefits assistance system.
+        Focus on accurately determining if users need program information (SUBSTANTIVE) or are reporting problems (GRIEVANCE).
+        Pay special attention to complaints, issues with applications, or mentions of problems with benefits."""
         
         try:
-            decision = ollama_client.generate(
-                decision_system_prompt, 
-                decision_prompt,
-                f"{thread_id}_decision"
+            classification = ollama_client.generate(
+                classification_system_prompt, 
+                classification_prompt,
+                f"{thread_id}_classifier"
             ).strip().upper()
             
-            logger.info(f"Tool call decision: {decision}")
+            logger.info(f"Message classification result: {classification}")
             
-            if "CONTEXT" in decision:
-                logger.info("Decision: USE CONTEXT - LLM determined existing context is sufficient")
-                return False
+            # Extract just the classification word using more robust approach
+            classification_match = re.search(r'(?:^|\n)\s*(GREETING|CASUAL|SUBSTANTIVE|GRIEVANCE)\s*(?:$|\n)', classification)
+            if classification_match:
+                classification = classification_match.group(1).strip()
+                logger.info(f"Found explicit classification: {classification}")
+            # Fallback: look for any of the words anywhere in the text
+            elif "GREETING" in classification:
+                classification = "GREETING"
+            elif "CASUAL" in classification:
+                classification = "CASUAL"
+            elif "SUBSTANTIVE" in classification:
+                classification = "SUBSTANTIVE"
+            elif "GRIEVANCE" in classification:
+                classification = "GRIEVANCE"
             else:
-                logger.info("Decision: CALL TOOLS - LLM determined new information is needed")
-                return True
+                # Unclear classification - ask for clarification
+                logger.warning(f"Could not determine classification: '{classification}'")
+                
+                # Create a clarification prompt
+                clarification_prompt = f"""
+                I'm not quite sure what you're asking about. The user said: "{query}"
+                
+                Please respond by:
+                1. Politely acknowledging that you're not sure if they're asking about benefit programs, reporting an issue, or something else
+                2. Asking them to clarify if they want to:
+                - Check eligibility for benefit programs
+                - Report a problem or file a complaint
+                - Check the status of an application or benefit
+                3. Being helpful and friendly in your request for clarification
+                
+                Your response should be brief and conversational.
+                """
+                
+                # Generate clarification response
+                clarification_response = ollama_client.generate(
+                    "You are a helpful social benefits assistant. Respond conversationally.",
+                    clarification_prompt,
+                    f"{thread_id}_clarification"
+                )
+                
+                # Add this as an assistant message to the conversation history
+                self.update_conversation_history(thread_id, "assistant", clarification_response)
+                
+                return "CLARIFICATION"
+            
+            logger.info(f"Final classification: {classification}")
+            
+            # Make sure we're using exact string comparison, not substring matching
+            if classification == "GREETING" or classification == "CASUAL":
+                # Only skip tools for greeting/casual if we have short conversation history
+                # If we're deep in conversation, treat casual comments as follow-ups
+                if len(context["conversation_history"]) <= 2:
+                    logger.info("Decision: DON'T CALL TOOLS - Message is a greeting or casual question")
+                    return "CONTEXT"
+                else:
+                    # In established conversations, use existing context for greeting/casual
+                    logger.info("Decision: USE CONTEXT - Casual comment in existing conversation")
+                    return "CONTEXT"
+            elif classification == "SUBSTANTIVE":
+                # For substantive queries, we might still use existing context
+                # If no programs have been retrieved yet, call tools
+                if not context["retrieved_programs"]:
+                    logger.info("Decision: CALL TOOLS - No programs in context")
+                    return "TOOLS"
+                    
+                # Use the LLM to decide if this query needs tools
+                decision_prompt = f"""
+                USER QUERY: "{query}"
+                
+                CONTEXT:
+                - Programs already in context: {[p.get('name', f"Program {p.get('id')}") for p in context['retrieved_programs']]}
+                - User profile: {json.dumps(context['user_profile'])}
+                - Previous conversation: {[msg['content'] for msg in context['conversation_history'][-3:] if msg['role'] == 'user']}
+                
+                QUESTION: Should I call tools to get new information, or use existing context?
+                
+                Consider these factors:
+                1. If the query is about programs we already have information on, use existing context
+                2. If the query is asking for completely new information, call tools
+                3. If the query is a simple follow-up or clarification, use existing context
+                
+                Respond with EXACTLY ONE WORD: "TOOLS" or "CONTEXT"
+                """
+                
+                decision_system_prompt = "You are a decision support system. Make careful decisions about when to use tools vs. existing context."
+                
+                try:
+                    decision = ollama_client.generate(
+                        decision_system_prompt, 
+                        decision_prompt,
+                        f"{thread_id}_decision"
+                    ).strip().upper()
+                    
+                    logger.info(f"Tool call decision: {decision}")
+                    
+                    if "CONTEXT" in decision:
+                        logger.info("Decision: USE CONTEXT - LLM determined existing context is sufficient")
+                        return "CONTEXT"
+                    else:
+                        logger.info("Decision: CALL TOOLS - LLM determined new information is needed")
+                        return "TOOLS"
+                except Exception as e:
+                    logger.error(f"Error in decision making: {e}")
+                    # Default to calling tools if decision fails
+                    logger.info("Decision: CALL TOOLS - Decision making failed, defaulting to safety")
+                    return "TOOLS"
+            elif classification == "GRIEVANCE":
+                logger.info("Decision: CALL TOOLS - Message is a grievance")
+                # Activate grievance context
+                self.update_grievance_context(thread_id, {"active": True, "stage": "identification"})
+                return "TOOLS"
+            else:
+                # This code path should never be reached due to our handling above,
+                # but keeping it as a safety check
+                logger.warning(f"Unexpected classification value: '{classification}'. Asking user to clarify intent.")
+                
+                # Create a clarification prompt
+                clarification_prompt = f"""
+                I'm not quite sure what you're asking about. The user said: "{query}"
+                
+                Please respond by:
+                1. Politely acknowledging that you're not sure if they're asking about benefit programs, reporting an issue, or something else
+                2. Asking them to clarify if they want to:
+                - Check eligibility for benefit programs
+                - Report a problem or file a complaint
+                - Check the status of an application or benefit
+                3. Being helpful and friendly in your request for clarification
+                
+                Your response should be brief and conversational.
+                """
+                
+                # Generate clarification response
+                clarification_response = ollama_client.generate(
+                    "You are a helpful social benefits assistant. Respond conversationally.",
+                    clarification_prompt,
+                    f"{thread_id}_clarification"
+                )
+                
+                # Add this as an assistant message to the conversation history
+                self.update_conversation_history(thread_id, "assistant", clarification_response)
+                
+                return "CLARIFICATION"
+                
         except Exception as e:
-            logger.error(f"Error in decision making: {e}")
-            # Default to calling tools if decision fails
-            logger.info("Decision: CALL TOOLS - Decision making failed, defaulting to safety")
-            return True
+            logger.error(f"Error in classification: {e}")
+            # Generate clarification response for classification failures
+            clarification_prompt = f"""
+            I'm having trouble understanding your request. The user said: "{query}"
+            
+            Please respond by:
+            1. Politely apologizing for not understanding their request clearly
+            2. Asking them to rephrase their question, specifying if they want to:
+            - Learn about benefit programs they might qualify for
+            - Report a problem with their benefits
+            - Check their application status
+            3. Being helpful and friendly in your request for clarification
+            
+            Your response should be brief and conversational.
+            """
+            
+            # Generate clarification response
+            clarification_response = ollama_client.generate(
+                "You are a helpful social benefits assistant. Respond conversationally.",
+                clarification_prompt,
+                f"{thread_id}_clarification"
+            )
+            
+            # Add this as an assistant message to the conversation history
+            self.update_conversation_history(thread_id, "assistant", clarification_response)
+            
+            return "CLARIFICATION"
     
     def determine_grievance_stage(self, thread_id: str, query: str) -> str:
         """Determine the current stage of the grievance process."""
