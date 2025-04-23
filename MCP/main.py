@@ -101,7 +101,7 @@ Make the user feel comfortable asking about benefit programs without being pushy
         logger.info("SocialBenefitsMCP initialization complete")
     
     def process_query(self, query: str, thread_id: str = "default") -> str:
-        """Process a user query using the MCP framework."""
+        """Process a user query using the MCP framework with enhanced classification."""
         try:
             logger.info(f"Processing query: '{query}'")
             
@@ -120,19 +120,75 @@ Make the user feel comfortable asking about benefit programs without being pushy
                 return self._process_grievance_query(query, thread_id, context)
             
             # Determine if we need to call tools or can use existing context
-            # Use prompt-based classification via MCP server
-            should_call_tools = self.mcp_server.should_call_tools(thread_id, query, self.ollama)
+            # Use enhanced prompt-based classification via MCP server
+            tool_decision = self.mcp_server.should_call_tools(thread_id, query, self.ollama)
+            
+            # Handle clarification requests
+            if tool_decision == "CLARIFICATION":
+                # The response has already been added to conversation history in should_call_tools
+                # Just get the last assistant message and return it
+                last_message = self.mcp_server.get_thread_context(thread_id)["conversation_history"][-1]
+                return last_message["content"]
             
             # Additional logging to help debug classification issues
-            logger.info(f"Tool decision for query '{query}': {should_call_tools}")
+            logger.info(f"Tool decision for query '{query}': {tool_decision}")
             
             # Check if grievance context was activated during classification
             if not grievance_active and context["grievance_context"]["active"]:
                 logger.info("Grievance context was activated during classification")
                 return self._process_grievance_query(query, thread_id, context)
             
-            # Only treat as greeting if we explicitly decided not to call tools AND it's an early turn
-            if not should_call_tools and len(context["conversation_history"]) <= 2:
+            # For GRIEVANCE decision, process as grievance directly
+            if tool_decision == "GRIEVANCE":
+                # Ensure grievance context is active
+                if not context["grievance_context"]["active"]:
+                    self.mcp_server.update_grievance_context(thread_id, {"active": True, "stage": "identification"})
+                # Process as grievance
+                return self._process_grievance_query(query, thread_id, context)
+                
+            # NEW: For COLLECT_INFO decision, ask for more user details before proceeding
+            if tool_decision == "COLLECT_INFO":
+                logger.info("Collecting additional user information before proceeding")
+                
+                # Review existing profile
+                user_profile = context["user_profile"]
+                
+                # Create a prompt to ask for specific missing information
+                collection_prompt = f"""
+                The user has asked about program eligibility with this query: "{query}"
+                
+                Current user profile information:
+                {json.dumps(user_profile, indent=2)}
+                
+                Create a friendly, conversational response that:
+                1. Acknowledges their interest in finding eligible programs
+                2. Explains that you need a bit more information to provide the best recommendations
+                3. Asks about specific missing information such as:
+                - Age or age group if not provided
+                - Income level if not provided  
+                - Marital status if not provided
+                - Employment status if not provided
+                - Household size/dependents if not provided
+                - Any special circumstances (disabilities, veteran status, etc.)
+                4. Explains why this information helps find the right programs
+                5. Reassures them about privacy and that this helps provide better results
+                
+                Make it warm and conversational, not like filling out a form.
+                """
+                
+                # Generate the information collection response
+                collection_response = self.ollama.generate(
+                    "You are a helpful social benefits assistant. Respond conversationally.",
+                    collection_prompt,
+                    f"{thread_id}_info_collection"
+                )
+                
+                # Add to conversation history
+                self.mcp_server.update_conversation_history(thread_id, "assistant", collection_response)
+                return collection_response
+            
+            # Only treat as greeting if we explicitly decided to use context AND it's an early turn
+            if tool_decision == "CONTEXT" and len(context["conversation_history"]) <= 2:
                 # This is likely a greeting or casual question (first turn)
                 logger.info("Handling as greeting or casual question")
                 greeting_response = self.ollama.generate(
@@ -145,9 +201,10 @@ Make the user feel comfortable asking about benefit programs without being pushy
                 self.mcp_server.update_conversation_history(thread_id, "assistant", greeting_response)
                 return greeting_response
             
-            if should_call_tools:
+            if tool_decision == "TOOLS":
                 logger.info("Executing tool chain for new information")
                 
+                # Execute the full tool chain
                 # 1. Extract user details from query and conversation history
                 user_details = self.tools.extract_user_details_tool(
                     query, 
@@ -217,32 +274,11 @@ Make the user feel comfortable asking about benefit programs without being pushy
                 if not program_details:
                     logger.warning("No valid program details retrieved from database")
                     
-                    # Check if the database table exists
-                    try:
-                        # Check for program_info table
-                        tables = self.db_tool.execute_query("SELECT name FROM sqlite_master WHERE type='table'")
-                        table_names = [t.get('name') for t in tables if t.get('name')]
-                        logger.info(f"Database tables: {table_names}")
-                        
-                        if 'program_info' in table_names:
-                            # Table exists but no matching programs
-                            logger.info("program_info table exists but no matching records found")
-                            db_issue = "The database table exists but no matching program information was found."
-                        else:
-                            # Table doesn't exist
-                            logger.warning("program_info table doesn't exist in the database")
-                            db_issue = "The database appears to be missing the necessary table."
-                    except Exception as e:
-                        logger.error(f"Error checking database tables: {e}")
-                        db_issue = "There's an issue accessing the program database."
-                    
                     # Generate a more informative response
                     no_details_prompt = f"""
                     The user asked: "{query}"
                     
-                    Technical context (don't mention this directly): {db_issue}
-                    
-                    Please:
+                    We couldn't find specific program information in our database. Please:
                     1. Acknowledge their query about being a {context["user_profile"].get("age_group", "")} {context["user_profile"].get("marital_status", "")} {context["user_profile"].get("gender", "")}
                     2. Explain that you don't have specific program information available right now
                     3. Ask what types of benefits they're most interested in (healthcare, housing, financial assistance, etc.)
@@ -301,7 +337,15 @@ Make the user feel comfortable asking about benefit programs without being pushy
                     response
                 )
                 
-            else:
+                # Log the generated response
+                logger.info(f"Generated response length: {len(response)}")
+                
+                # Add assistant message to conversation history
+                self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+                
+                return response
+                
+            else:  # tool_decision == "CONTEXT"
                 logger.info("Using existing context to answer follow-up question")
                 
                 # Get relevant context
@@ -339,12 +383,12 @@ Make the user feel comfortable asking about benefit programs without being pushy
                     context_prompt,
                     thread_id
                 )
-            
-            # Add assistant message to conversation history
-            self.mcp_server.update_conversation_history(thread_id, "assistant", response)
-            
-            return response
-            
+                
+                # Add assistant message to conversation history
+                self.mcp_server.update_conversation_history(thread_id, "assistant", response)
+                
+                return response
+                
         except Exception as e:
             logger.error(f"Error in process_query: {e}")
             logger.error(traceback.format_exc())
