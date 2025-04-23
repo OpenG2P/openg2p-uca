@@ -166,31 +166,20 @@ class MCPServer:
         "reference_number": any application reference numbers,
         "status_keywords": any words indicating status tracking,
         "grievance_keywords": any words indicating problems or complaints,
-        "demographic_info": {{
-            "age_group": any age group mentioned (child, adult, senior, etc.),
-            "marital_status": any marital status mentioned (single, married, divorced, etc.),
-            "gender": any gender mentioned (male, female, etc.),
-            "income": any income amount mentioned,
-            "employment": any employment status mentioned,
-            "location": any location mentioned,
-            "disabilities": any disabilities mentioned,
-            "household_size": any household size or dependents mentioned
-        }}
+        "demographic_info": any demographic information like age, gender, marital status, income level, etc.
         }}
         
         4. recommendations: {{
         "needs_clarification": true/false,
-        "suggested_flow": one of ["program_search", "program_info_collection", "status_check", "grievance", "ask_clarification"],
-        "has_sufficient_demographics": true/false
+        "suggested_flow": one of ["program_search", "program_info_collection", "status_check", "grievance", "ask_clarification"]
         }}
         
         Examples of status tracking phrases: "track application", "check status", "follow up", "where is my application"
         Examples of grievance phrases: "issue with", "problem", "not working", "wrong information", "complaint"
         
         If you detect a USER ID in format USER### (like USER123), this is likely a grievance or status check.
-        If the query is about program eligibility and includes at least age/age_group and one other demographic detail, set has_sufficient_demographics to true.
+        If the query is about program eligibility but lacks demographic details, suggest "program_info_collection".
         """
-
         
         # Generate entity analysis
         analysis_response = ollama_client.generate(
@@ -229,10 +218,13 @@ class MCPServer:
                     "suggested_flow": "ask_clarification"
                 }
             }
-    
-    
+
     def should_call_tools(self, thread_id: str, query: str, ollama_client) -> str:
-        """Determine if tools should be called for a given query using enhanced prompt-based classification."""
+        """Determine if tools should be called for a given query using enhanced prompt-based classification.
+        
+        Returns:
+            str: "TOOLS", "CONTEXT", "CLARIFICATION", "COLLECT_INFO", or "GRIEVANCE"
+        """
         context = self.get_thread_context(thread_id)
         
         # Log the current state for debugging
@@ -252,64 +244,6 @@ class MCPServer:
         # Log the detailed intent analysis
         logger.info(f"Intent analysis for query '{query}': {intent_data}")
         
-        # Check for explicitly mentioned program IDs
-        program_id = intent_data.get("entities", {}).get("program_id")
-        if program_id:
-            logger.info(f"Explicit program ID mentioned: {program_id}")
-            # Store program ID in context for use by tools
-            if "current_query" not in context:
-                context["current_query"] = {}
-            context["current_query"]["explicit_program_id"] = program_id
-            
-            # If program info is being requested for a specific ID, always call tools
-            if intent_data.get("primary_intent") == "program_info":
-                logger.info("Decision: CALL TOOLS - Specific program ID mentioned")
-                return "TOOLS"
-        
-        # Extract and update demographic information
-        demographic_info = intent_data.get("entities", {}).get("demographic_info", {})
-        profile_updated = False
-        
-        if demographic_info:
-            # Transform demographic info into user profile format
-            profile_updates = {}
-            
-            if demographic_info.get("age_group"):
-                profile_updates["age_group"] = demographic_info["age_group"]
-            
-            if demographic_info.get("marital_status"):
-                profile_updates["marital_status"] = demographic_info["marital_status"]
-                
-            if demographic_info.get("gender"):
-                profile_updates["gender"] = demographic_info["gender"]
-                
-            if demographic_info.get("income"):
-                profile_updates["income_level"] = demographic_info["income"]
-                
-            if demographic_info.get("employment"):
-                profile_updates["employment_status"] = demographic_info["employment"]
-                
-            if demographic_info.get("location"):
-                profile_updates["location"] = demographic_info["location"]
-                
-            if demographic_info.get("disabilities"):
-                profile_updates["disabilities"] = demographic_info["disabilities"]
-                
-            if demographic_info.get("household_size"):
-                profile_updates["family_size"] = demographic_info["household_size"]
-            
-            # Update the user profile if we have any new information
-            if profile_updates:
-                self.update_user_profile(thread_id, profile_updates)
-                logger.info(f"Updated user profile with demographic info: {profile_updates}")
-                profile_updated = True
-        
-        # IMPORTANT: Check profile updates BEFORE confidence check
-        # If profile was updated AND we have programs in context, call tools
-        if profile_updated and len(context["retrieved_programs"]) > 0:
-            logger.info("Decision: CALL TOOLS - Demographic follow-up to previous program search")
-            return "TOOLS"
-        
         # Extract user ID if present and activate grievance flow
         user_id = intent_data.get("entities", {}).get("user_id")
         if user_id:
@@ -321,25 +255,10 @@ class MCPServer:
             })
             return "GRIEVANCE"
         
-        # Check if we have sufficient demographic info for program search
-        has_sufficient_demographics = intent_data.get("recommendations", {}).get("has_sufficient_demographics", False)
-        
-        # If the profile now has demographic info, we should consider that sufficient
-        if len(context["user_profile"]) >= 2 or has_sufficient_demographics:
-            # Override the decision to TOOLS if we have enough demographic info for program_info intent
-            if intent_data.get("primary_intent") == "program_info":
-                logger.info("Decision: CALL TOOLS - Sufficient demographic information for program search")
-                return "TOOLS"
-        
         # Handle based on primary intent and confidence
         primary_intent = intent_data.get("primary_intent", "unclear")
         confidence = intent_data.get("confidence", 0.0)
         suggested_flow = intent_data.get("recommendations", {}).get("suggested_flow", "ask_clarification")
-        
-        # If low confidence but we updated profile info and have programs in context
-        if (primary_intent == "unclear" or confidence < 0.6) and profile_updated and context["retrieved_programs"]:
-            logger.info("Decision: CALL TOOLS - Low confidence query with demographic updates in program context")
-            return "TOOLS"
         
         if confidence < 0.6 or primary_intent == "unclear":
             # Handle low confidence or unclear intent
@@ -357,20 +276,15 @@ class MCPServer:
             - Detected grievance keywords: {entities.get("grievance_keywords", [])}
             - Detected reference numbers: {entities.get("reference_number", "None")}
             - Suggested flow: {suggested_flow}
-            - Current user profile: {json.dumps(context["user_profile"], indent=2)}
-            - Retrieved programs: {[p.get("name", f"Program {p.get('id')}") for p in context["retrieved_programs"]]}
-            
-            {f"Previous program search performed: {len(context['retrieved_programs'])} programs found." if context["retrieved_programs"] else "No previous program search performed."}
             
             I need to create a response that:
             
-            1. Acknowledges the information they just provided (especially if demographic details)
-            2. If they've provided new demographic information and we have programs in context, I should offer to refine their program search with the new details
-            3. Otherwise, suggest options like:
+            1. Acknowledges what I understood (if anything)
+            2. Clearly explains what I can help with, specifically:
             - Finding benefit programs they might qualify for
             - Checking application status (mentioning they'll need their USER ID)
             - Filing a complaint about an existing benefit
-            4. Asks them to clarify what they'd like to do next
+            3. Asks them to clarify which option they need, in a friendly way
             
             Keep the response conversational and helpful, not overly formal.
             """
@@ -394,10 +308,8 @@ class MCPServer:
             return "GRIEVANCE"
         
         elif primary_intent == "program_info":
-            # Check if we need to collect more user information before searching
-            # Only do this if we don't already have enough profile information
-            if (suggested_flow == "program_info_collection" and len(context["user_profile"]) < 2 
-                and not has_sufficient_demographics):
+            # New: Check if we should collect more user information before searching
+            if suggested_flow == "program_info_collection" or len(context["user_profile"]) < 3:
                 # Not enough user information yet - we should collect more
                 logger.info("Decision: COLLECT_INFO - Need more user demographic information")
                 return "COLLECT_INFO"
@@ -425,7 +337,6 @@ class MCPServer:
             1. If the query is about programs we already have information on, use existing context
             2. If the query is asking for completely new information, call tools
             3. If the query is a simple follow-up or clarification, use existing context
-            4. If the user provided new demographic information, call tools
             
             Respond with EXACTLY ONE WORD: "TOOLS" or "CONTEXT"
             """
