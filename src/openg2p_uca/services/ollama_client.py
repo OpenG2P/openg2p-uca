@@ -18,16 +18,25 @@ class OllamaClientService(BaseService):
         self.httpx_client = httpx.AsyncClient()
         self.ollama_url: str = None
         self.system_prompt: str = None
+        self.system_prompt_suffix_to_store: str = None
         self.model: str = None
         self.ollama_api_timeout: int = None
 
-    def configure(self, url: str, system_prompt: str, model: str, api_timeout: int = None):
+    def configure(
+        self,
+        url: str,
+        system_prompt: str,
+        model: str,
+        system_prompt_suffix_to_store: str = "",
+        api_timeout: int = None,
+    ):
         self.ollama_url = url
         self.system_prompt = system_prompt
+        self.system_prompt_suffix_to_store = system_prompt_suffix_to_store
         self.model = model
         self.ollama_api_timeout = api_timeout
 
-    async def close(self):
+    async def aclose(self):
         await self.httpx_client.aclose()
 
     async def ollama_chat_api(self, request: OllamaChatRequest) -> OllamaChatResponse:

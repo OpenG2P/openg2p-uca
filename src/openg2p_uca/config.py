@@ -1,3 +1,4 @@
+from openg2p_fastapi_auth.config import Settings as AuthSettings
 from openg2p_fastapi_common.config import Settings as BaseSettings
 from pydantic import model_validator
 from pydantic_settings import SettingsConfigDict
@@ -5,7 +6,7 @@ from pydantic_settings import SettingsConfigDict
 from . import __version__
 
 
-class Settings(BaseSettings):
+class Settings(AuthSettings, BaseSettings):
     model_config = SettingsConfigDict(env_prefix="uca_", env_file=".env", extra="allow")
 
     openapi_title: str = "OpenG2P Unified Conversation Agent"
@@ -16,10 +17,23 @@ class Settings(BaseSettings):
     """
     openapi_version: str = __version__
 
-    # ollama_base_url: str = "http://localhost:11434"
-    # ollama_api_timeout: int = 10
+    default_ollama_base_url: str = "http://localhost:11434"
+    default_ollama_model: str = "deepseek-r1:8b"
+    default_ollama_api_timeout: int = 10
+
+    default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.txt"
+
+    main_agent_ollama_base_url: str = ""
+    main_agent_ollama_model: str = ""
+    main_agent_ollama_api_timeout: int | None = None
+    main_agent_system_prompt_path: str = "system_prompts/main_orchestration_agent.txt"
+    main_agent_system_prompt_suffix_to_store_path: str = ""
 
     user_id_key_in_auth: str = "sub"
+    thread_id_cookie_name: str = "thread_id"
+    thread_id_cookie_path: str = "/"
+    thread_id_cookie_secure: bool = True
+    thread_id_cookie_httponly: bool = True
 
     # Ensure this is <= Chat store implementation's limit.
     # Example; ES has an index result limit of 10000. See index.max_result_window in ES.
@@ -34,7 +48,17 @@ class Settings(BaseSettings):
     chat_store_es_index: str = "uca_messages"
 
     @model_validator(mode="after")
-    def fix_fields_model_validator(self):
+    def main_agent_config_validator(self):
+        if not self.main_agent_ollama_base_url:
+            self.main_agent_ollama_base_url = self.default_ollama_base_url
+        if not self.main_agent_ollama_model:
+            self.main_agent_ollama_model = self.default_ollama_model
+        if not self.main_agent_ollama_api_timeout:
+            self.main_agent_ollama_api_timeout = self.default_ollama_api_timeout
+        if not self.main_agent_system_prompt_suffix_to_store_path:
+            self.main_agent_system_prompt_suffix_to_store_path = (
+                self.default_system_prompt_suffix_to_store_path
+            )
         return self
 
 

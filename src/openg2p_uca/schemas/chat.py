@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 ChatMessageRole = Literal[
+    "system",
     "assistant",
     "user",
 ]
@@ -24,3 +25,11 @@ class GetChatMessageResponse(BaseModel):
     messages: list[ChatMessage]
     user_id: str | None = None
     thread_id: str | None = None
+
+
+class UcaChatMessageRequest(BaseModel):
+    message: str
+
+
+class UcaChatMessageResponse(BaseModel):
+    message: str

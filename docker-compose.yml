@@ -1,0 +1,41 @@
+name: openg2p-uca
+services:
+  opensearch:
+    image: bitnami/opensearch:2.17.0
+    volumes:
+      - opensearch-data:/bitnami/opensearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  opensearch-dashboards:
+    image: bitnami/opensearch-dashboards:2.17.0
+    ports:
+      - "5601:5601"
+    environment:
+      - OPENSEARCH_DASHBOARDS_OPENSEARCH_URL=opensearch
+      - OPENSEARCH_DASHBOARDS_DISABLE_STRICT_CSP=yes
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  network:
+    driver: bridge
+
+volumes:
+  opensearch-data:
+    driver: local

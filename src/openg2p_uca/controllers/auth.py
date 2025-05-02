@@ -1,5 +1,3 @@
-from typing import List
-
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController as BaseAuthController
 from openg2p_fastapi_auth.models.orm.login_provider import LoginProvider
 
@@ -10,7 +8,7 @@ _config = Settings.get_config()
 
 
 class AuthController(BaseAuthController):
-    async def get_login_providers_db(self) -> List[LoginProvider]:
+    async def get_login_providers_db(self) -> list[LoginProvider]:
         return [ap.map_auth_provider_to_login_provider() for ap in await AuthOauthProviderORM.get_all()]
 
     async def get_login_provider_db_by_id(self, id: int) -> LoginProvider:

@@ -54,7 +54,7 @@ class ChatStoreService(BaseService):
         raise NotImplementedError()
 
 
-class ESHelperService(BaseService):
+class ESChatStoreService(ChatStoreService):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.client = httpx.AsyncClient(
@@ -64,7 +64,7 @@ class ESHelperService(BaseService):
             verify=_config.chat_store_es_ssl_verify,
         )
 
-    async def close(self):
+    async def aclose(self):
         await self.client.aclose()
 
     async def migrate(self):
