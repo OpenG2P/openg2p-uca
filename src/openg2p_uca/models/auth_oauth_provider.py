@@ -131,5 +131,5 @@ class AuthOauthProviderORM(BaseORMModel):
                 code_verifier=self.code_verifier,
                 extra_authorize_parameters=orjson.loads(self.extra_authorize_params or "{}"),
             ).model_dump(),
-            active=self.g2p_self_service_allowed,
+            active=self.g2p_uca_portal_allowed,
         )

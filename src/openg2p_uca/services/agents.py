@@ -7,7 +7,7 @@ from openg2p_fastapi_auth.models.credentials import AuthCredentials
 
 from ..config import Settings
 from ..errors import UcaCommonException
-from ..schemas.chat import ChatMessage
+from ..schemas.chat import ChatMessage, ChatThread
 from ..schemas.ollama import OllamaChatMessage, OllamaChatRequest, OllamaChatResponse
 from .chat_store import ChatStoreService
 from .ollama_client import OllamaClientService
@@ -70,6 +70,13 @@ class BaseAgent(OllamaClientService):
         auth_params["auth_user_id"] = user_id
         system_prompt_params = system_prompt_params or {}
         system_prompt_params = {**auth_params, **system_prompt_params}
+        await self.chat_store_service.put_thread(
+            ChatThread(
+                id=thread_id,
+                user_id=user_id,
+                created_at=initialized_at,
+            )
+        )
         await self.chat_store_service.put_message(
             ChatMessage(
                 id=str(uuid4()),
