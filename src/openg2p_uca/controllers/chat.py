@@ -1,9 +1,10 @@
 import logging
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import Cookie, Depends
+from fastapi import Cookie, Depends, Response
 from fastapi.responses import ORJSONResponse
 from openg2p_fastapi_auth.dependencies import JwtBearerAuth
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
@@ -14,10 +15,12 @@ from ..schemas.chat import (
     UcaChatMessageRequest,
     UcaChatMessageResponse,
     UcaChatMessagesResponse,
+    UcaChatThreadCreateResponse,
+    UcaChatThreadRequest,
     UcaChatThreadResponse,
     UcaChatThreadsResponse,
 )
-from ..services.agents import AuthMissingUserId, MainAgent
+from ..services.agents import MainAgent, ThreadIdInvalid
 from ..services.chat_store import ChatStoreService
 
 _config = Settings.get_config()
@@ -28,31 +31,46 @@ class ChatController(BaseController):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.router.prefix += "/chat"
+        self.router.tags += ["chat"]
         self.router.add_api_route(
-            "/newChat",
+            "/thread",
             self.post_new_chat_thread,
-            responses={200: {"model": UcaChatMessageResponse}},
+            responses={200: {"model": UcaChatThreadCreateResponse}},
             methods=["POST"],
         )
 
         self.router.add_api_route(
-            "/newChatMessage",
+            "/thread",
+            self.put_change_chat_thread,
+            methods=["PUT"],
+        )
+
+        self.router.add_api_route(
+            "/thread",
+            self.get_current_chat_thread,
+            responses={200: {"model": UcaChatThreadResponse}},
+            methods=["GET"],
+        )
+
+        self.router.add_api_route(
+            "/threads",
+            self.get_chat_threads,
+            responses={200: {"model": UcaChatThreadsResponse}},
+            methods=["GET"],
+        )
+
+        self.router.add_api_route(
+            "/message",
             self.post_new_chat_message,
             responses={200: {"model": UcaChatMessageResponse}},
             methods=["POST"],
         )
 
         self.router.add_api_route(
-            "/getMessages",
+            "/messages",
             self.get_chat_messages,
             responses={200: {"model": UcaChatMessagesResponse}},
-            methods=["GET"],
-        )
-
-        self.router.add_api_route(
-            "/getThreads",
-            self.get_chat_threads,
-            responses={200: {"model": UcaChatThreadsResponse}},
             methods=["GET"],
         )
 
@@ -72,29 +90,113 @@ class ChatController(BaseController):
         return self._chat_store
 
     async def post_new_chat_thread(self, auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())]):
+        """
+        Initiate new chat threads. Returns new thread_id in cookie
+        and the AI greeting message in response body.
+        """
         new_thread_id = str(uuid4())
-        await self.main_agent.initialize_chat_thread(new_thread_id, auth)
-        res = await self.main_agent.chat_and_store_by_user(new_thread_id, None, auth)
+        res_thread = await self.main_agent.initialize_chat_thread(new_thread_id, auth)
+        res_msg = await self.main_agent.chat_and_store_by_user(new_thread_id, None, auth)
         response = ORJSONResponse(
-            content=UcaChatMessageResponse(
-                message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
+            content=UcaChatThreadCreateResponse(
+                thread_id=res_thread.id,
+                thread_created_at=res_thread.created_at,
+                message=self.filter_message(res_msg.message),
+                message_by=res_msg.message_by,
+                message_sent_at=res_msg.sent_at,
             ).model_dump(mode="json")
         )
+        cookie_expires = None
+        if _config.thread_id_cookie_max_age:
+            cookie_expires = res_thread.created_at + timedelta(seconds=_config.thread_id_cookie_max_age)
         response.set_cookie(
             _config.thread_id_cookie_name,
-            new_thread_id,
+            res_thread.id,
+            max_age=_config.thread_id_cookie_max_age,
+            expires=cookie_expires,
             path=_config.thread_id_cookie_path or None,
             httponly=_config.thread_id_cookie_httponly,
             secure=_config.thread_id_cookie_secure,
         )
         return response
 
+    async def put_change_chat_thread(
+        self,
+        thread: UcaChatThreadRequest,
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        response: Response,
+    ):
+        """
+        Switch to new thread_id given in request body. Or clear current thread_id if given null.
+        """
+        if not thread.thread_id:
+            response.delete_cookie(_config.thread_id_cookie_name)
+        else:
+            user_id = self.main_agent.get_user_id(auth)
+            res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread.thread_id)
+            if len(res.threads) < 1:
+                # Raise error if thread_id doesn't exists against give user_id.
+                raise ThreadIdInvalid()
+            cookie_age = _config.thread_id_cookie_max_age
+            cookie_expires = None
+            if cookie_age:
+                cookie_expires = datetime.now(timezone.utc) + timedelta(seconds=cookie_age)
+            response.set_cookie(
+                _config.thread_id_cookie_name,
+                thread.thread_id,
+                max_age=cookie_age,
+                expires=cookie_expires,
+                path=_config.thread_id_cookie_path or None,
+                httponly=_config.thread_id_cookie_httponly,
+                secure=_config.thread_id_cookie_secure,
+            )
+
+    async def get_current_chat_thread(
+        self,
+        thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+    ):
+        """
+        Get the current thread_id of logged in user.
+        """
+        user_id = self.main_agent.get_user_id(auth)
+        res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread_id)
+        if len(res.threads) < 1:
+            # Raise error if thread_id doesn't exists against give user_id.
+            raise ThreadIdInvalid()
+        # Returns the same thread_id given in cookie.
+        return UcaChatThreadResponse(thread_id=res.threads[0].id, created_at=res.threads[0].created_at)
+
+    async def get_chat_threads(
+        self,
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        page: int = 0,
+        limit: int = 100,
+        sort: Literal["asc", "desc"] = "desc",
+    ):
+        """
+        Get all threads of the logged in user,
+        based on limit and page number and sort order.
+        """
+        user_id = self.main_agent.get_user_id(auth)
+        res = await self.chat_store_service.get_threads(user_id=user_id, page=page, limit=limit, sort=sort)
+        return UcaChatThreadsResponse(
+            threads=[
+                UcaChatThreadResponse(thread_id=thread.id, created_at=thread.created_at)
+                for thread in res.threads
+            ]
+        )
+
     async def post_new_chat_message(
         self,
         message: UcaChatMessageRequest,
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
     ):
+        """
+        Posts new message, from request body, into the thread_id given in cookie.
+        Returns AI's response in body.
+        """
         res = await self.main_agent.chat_and_store_by_user(thread_id, message.message, auth)
         return UcaChatMessageResponse(
             message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
@@ -105,13 +207,14 @@ class ChatController(BaseController):
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
         auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
         page: int = 0,
-        limit: int = 10,
+        limit: int = 100,
         sort: Literal["asc", "desc"] = "desc",
     ):
-        try:
-            user_id = getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e
+        """
+        Get all messages of the given thread,
+        based on limit and page number and sort order.
+        """
+        user_id = self.main_agent.get_user_id(auth)
         res = await self.chat_store_service.get_messages(
             thread_id=thread_id,
             user_id=user_id,
@@ -126,25 +229,6 @@ class ChatController(BaseController):
                     message=self.filter_message(msg.message), message_by=msg.message_by, sent_at=msg.sent_at
                 )
                 for msg in res.messages
-            ]
-        )
-
-    async def get_chat_threads(
-        self,
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
-        page: int = 0,
-        limit: int = 10,
-        sort: Literal["asc", "desc"] = "desc",
-    ):
-        try:
-            user_id = getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e
-        res = await self.chat_store_service.get_threads(user_id=user_id, page=page, limit=limit, sort=sort)
-        return UcaChatThreadsResponse(
-            threads=[
-                UcaChatThreadResponse(thread_id=thread.id, created_at=thread.created_at)
-                for thread in res.threads
             ]
         )
 

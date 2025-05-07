@@ -21,9 +21,11 @@ class Settings(AuthSettings, BaseSettings):
     openapi_version: str = __version__
 
     auth_api_post_new_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
+    auth_api_put_change_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
+    auth_api_get_current_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
+    auth_api_get_chat_threads: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_post_new_chat_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_get_chat_messages: ApiAuthSettings = ApiAuthSettings(enabled=True)
-    auth_api_get_chat_threads: ApiAuthSettings = ApiAuthSettings(enabled=True)
 
     default_ollama_base_url: str = "http://localhost:11434"
     default_ollama_model: str = "deepseek-r1:8b"
@@ -41,7 +43,8 @@ class Settings(AuthSettings, BaseSettings):
     thread_id_cookie_name: str = "thread_id"
     thread_id_cookie_path: str = "/"
     thread_id_cookie_secure: bool = True
-    thread_id_cookie_httponly: bool = False
+    thread_id_cookie_httponly: bool = True
+    thread_id_cookie_max_age: int | None = 3600 * 2
 
     # Ensure this is <= Chat store implementation's limit.
     # Example; ES has an index result limit of 10000. See index.max_result_window in ES.

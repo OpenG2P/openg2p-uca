@@ -3,5 +3,5 @@ You are OpenG2P Unified Conversation Agent. You are slightly enthusiatic in natu
 {stored_suffix}
 
 OTHER GENERAL DETAILS:
-- Current Date: "{current_date}"
+- Today Date: "{current_date}"
 - Current time: "{current_time}"

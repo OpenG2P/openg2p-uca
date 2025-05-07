@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
+from openg2p_fastapi_auth.models.profile import BasicProfile
 
 from ..config import Settings
 from ..errors import UcaCommonException
@@ -59,24 +60,20 @@ class BaseAgent(OllamaClientService):
         auth: AuthCredentials,
         system_prompt_params: dict | None = None,
         initialized_at: datetime | None = None,
-    ):
+    ) -> ChatThread:
         initialized_at = initialized_at or datetime.now(timezone.utc)
         profile = await self.auth_controller.get_profile(auth, online=True)
-        try:
-            user_id = getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e
+        user_id = self.get_user_id(profile)
         auth_params = {f"auth_{key}": val for key, val in profile.model_dump(mode="json").items()}
         auth_params["auth_user_id"] = user_id
         system_prompt_params = system_prompt_params or {}
         system_prompt_params = {**auth_params, **system_prompt_params}
-        await self.chat_store_service.put_thread(
-            ChatThread(
-                id=thread_id,
-                user_id=user_id,
-                created_at=initialized_at,
-            )
+        thread = ChatThread(
+            id=thread_id,
+            user_id=user_id,
+            created_at=initialized_at,
         )
+        await self.chat_store_service.put_thread(thread)
         await self.chat_store_service.put_message(
             ChatMessage(
                 id=str(uuid4()),
@@ -87,6 +84,7 @@ class BaseAgent(OllamaClientService):
                 message=self.system_prompt_suffix_to_store.format(**system_prompt_params),
             )
         )
+        return thread
 
     async def chat(
         self,
@@ -143,10 +141,7 @@ class BaseAgent(OllamaClientService):
         """
         message_sent_at = message_sent_at or datetime.now(timezone.utc)
 
-        try:
-            user_id = getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e
+        user_id = self.get_user_id(auth)
 
         # Call Chat API
         res = await self.chat(
@@ -180,6 +175,12 @@ class BaseAgent(OllamaClientService):
         await self.chat_store_service.put_message(assistant_chat_message)
 
         return assistant_chat_message
+
+    def get_user_id(self, auth: AuthCredentials | BasicProfile):
+        try:
+            return getattr(auth, _config.user_id_key_in_auth)
+        except Exception as e:
+            raise AuthMissingUserId() from e
 
 
 class MainAgent(BaseAgent):
