@@ -17,7 +17,7 @@ class ChatThread(BaseModel):
 
     @field_serializer("created_at")
     def serialize_dt(self, value: datetime):
-        return value.isoformat(timespec="milliseconds") + "Z"
+        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
 
 
 class GetChatThreadResponse(BaseModel):
@@ -37,7 +37,7 @@ class ChatMessage(BaseModel):
 
     @field_serializer("sent_at")
     def serialize_dt(self, value: datetime):
-        return value.isoformat(timespec="milliseconds") + "Z"
+        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
 
 
 class GetChatMessageResponse(BaseModel):
@@ -59,7 +59,7 @@ class UcaChatMessageResponse(BaseModel):
 
     @field_serializer("sent_at")
     def serialize_dt(self, value: datetime):
-        return value.isoformat(timespec="milliseconds") + "Z"
+        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
 
 
 class UcaChatThreadResponse(BaseModel):
@@ -68,7 +68,7 @@ class UcaChatThreadResponse(BaseModel):
 
     @field_serializer("created_at")
     def serialize_dt(self, value: datetime):
-        return value.isoformat(timespec="milliseconds") + "Z"
+        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
 
 
 class UcaChatMessagesResponse(BaseModel):

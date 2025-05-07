@@ -1,3 +1,5 @@
+import re
+
 from openg2p_fastapi_auth.config import ApiAuthSettings
 from openg2p_fastapi_auth.config import Settings as AuthSettings
 from openg2p_fastapi_common.config import Settings as BaseSettings
@@ -25,7 +27,7 @@ class Settings(AuthSettings, BaseSettings):
 
     default_ollama_base_url: str = "http://localhost:11434"
     default_ollama_model: str = "deepseek-r1:8b"
-    default_ollama_api_timeout: int = 10
+    default_ollama_api_timeout: int = 50
 
     default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.txt"
 
@@ -53,6 +55,10 @@ class Settings(AuthSettings, BaseSettings):
     chat_store_es_timeout_secs: int = 10
     chat_store_messages_es_index: str = "uca_messages"
     chat_store_threads_es_index: str = "uca_threads"
+
+    api_message_response_filters_regex: list[str] = [r"<think>.*?</think>", r"<think>.*?</response>"]
+    api_message_response_filters_sub: list[str] = ["", ""]
+    api_message_response_filter_flags: int = re.DOTALL
 
     @model_validator(mode="after")
     def main_agent_config_validator(self):

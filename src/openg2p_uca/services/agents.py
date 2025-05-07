@@ -60,7 +60,7 @@ class BaseAgent(OllamaClientService):
         system_prompt_params: dict | None = None,
         initialized_at: datetime | None = None,
     ):
-        initialized_at = initialized_at or datetime.now(timezone.utc).replace(tzinfo=None)
+        initialized_at = initialized_at or datetime.now(timezone.utc)
         profile = await self.auth_controller.get_profile(auth, online=True)
         try:
             user_id = getattr(auth, _config.user_id_key_in_auth)
@@ -93,6 +93,7 @@ class BaseAgent(OllamaClientService):
         thread_id: str,
         message: str | None,
         user_id: str | None = None,
+        message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
     ) -> OllamaChatResponse:
         """
@@ -118,6 +119,9 @@ class BaseAgent(OllamaClientService):
         # TODO: Check if first message is system role.
         system_prompt_params = system_prompt_params or {}
         system_prompt_params["stored_suffix"] = full_messages[0].content
+        if message_sent_at:
+            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
+            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p")
         full_messages[0].content = self.system_prompt.format(**system_prompt_params)
 
         return await self.ollama_chat_api(
@@ -137,7 +141,7 @@ class BaseAgent(OllamaClientService):
         User facing chat API, to be used for user chats.
         After successful response, user message and assistant response are stored back into Chat store.
         """
-        message_sent_at = message_sent_at or datetime.now(timezone.utc).replace(tzinfo=None)
+        message_sent_at = message_sent_at or datetime.now(timezone.utc)
 
         try:
             user_id = getattr(auth, _config.user_id_key_in_auth)
@@ -146,7 +150,12 @@ class BaseAgent(OllamaClientService):
 
         # Call Chat API
         res = await self.chat(
-            thread_id, message, user_id=user_id, system_prompt_params=system_prompt_params, **kw
+            thread_id,
+            message,
+            user_id=user_id,
+            message_sent_at=message_sent_at,
+            system_prompt_params=system_prompt_params,
+            **kw,
         )
 
         # Store original User message and assistant response

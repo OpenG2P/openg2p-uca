@@ -267,6 +267,6 @@ class ESChatStoreService(ChatStoreService):
         res.raise_for_status()
 
     def get_curr_timestamp(self) -> str:
-        now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        now = datetime.now(tz=timezone.utc)
         now = now.isoformat(timespec="milliseconds") + "Z"
         return now

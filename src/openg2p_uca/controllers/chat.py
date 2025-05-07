@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -75,7 +76,9 @@ class ChatController(BaseController):
         await self.main_agent.initialize_chat_thread(new_thread_id, auth)
         res = await self.main_agent.chat_and_store_by_user(new_thread_id, None, auth)
         response = ORJSONResponse(
-            UcaChatMessageResponse(message=res.message, message_by=res.message_by, sent_at=res.sent_at)
+            content=UcaChatMessageResponse(
+                message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
+            ).model_dump(mode="json")
         )
         response.set_cookie(
             _config.thread_id_cookie_name,
@@ -93,7 +96,9 @@ class ChatController(BaseController):
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
     ):
         res = await self.main_agent.chat_and_store_by_user(thread_id, message.message, auth)
-        return UcaChatMessageResponse(message=res.message, message_by=res.message_by, sent_at=res.sent_at)
+        return UcaChatMessageResponse(
+            message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
+        )
 
     async def get_chat_messages(
         self,
@@ -117,7 +122,9 @@ class ChatController(BaseController):
         )
         return UcaChatMessagesResponse(
             messages=[
-                UcaChatMessageResponse(message=msg.message, message_by=msg.message_by, sent_at=msg.sent_at)
+                UcaChatMessageResponse(
+                    message=self.filter_message(msg.message), message_by=msg.message_by, sent_at=msg.sent_at
+                )
                 for msg in res.messages
             ]
         )
@@ -140,3 +147,13 @@ class ChatController(BaseController):
                 for thread in res.threads
             ]
         )
+
+    def filter_message(self, message: str, strip=True) -> str:
+        flags = _config.api_message_response_filter_flags
+        for regex, subst in zip(
+            _config.api_message_response_filters_regex, _config.api_message_response_filters_sub
+        ):
+            message = re.sub(regex, subst, message, flags=flags)
+        if strip:
+            message = message.strip()
+        return message
