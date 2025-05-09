@@ -29,6 +29,10 @@ class ChatStoreService(BaseService):
         Abstract Service. Donot instantiate directly.
         """
         super().__init__(**kwargs)
+        self.enabled: bool = True
+
+    async def initialize(self):
+        raise NotImplementedError()
 
     async def aclose(self):
         raise NotImplementedError()
@@ -74,6 +78,10 @@ class ChatStoreService(BaseService):
 class ESChatStoreService(ChatStoreService):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.enabled = _config.chat_store_es_enabled
+        self.client: httpx.AsyncClient = None
+
+    async def initialize(self):
         self.client = httpx.AsyncClient(
             auth=(_config.chat_store_es_username, _config.chat_store_es_password)
             if _config.chat_store_es_username
@@ -85,6 +93,7 @@ class ESChatStoreService(ChatStoreService):
         await self.client.aclose()
 
     async def migrate(self):
+        await self.initialize()
         await self.create_or_update_index_mapping(
             _config.chat_store_messages_es_index,
             {
@@ -108,6 +117,7 @@ class ESChatStoreService(ChatStoreService):
                 }
             },
         )
+        await self.aclose()
 
     async def create_or_update_index_mapping(self, index: str, mapping: dict):
         # Check if the index exists

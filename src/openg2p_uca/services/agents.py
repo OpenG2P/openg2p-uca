@@ -5,6 +5,7 @@ from uuid import uuid4
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
+from openg2p_fastapi_common.service import BaseService
 
 from ..config import Settings
 from ..errors import UcaCommonException
@@ -36,9 +37,15 @@ class AuthMissingUserId(UcaCommonException):
         )
 
 
-class BaseAgent(OllamaClientService):
+class BaseAgent(BaseService):
     def __init__(self, **kw):
         super().__init__(**kw)
+        self.enabled = True
+        self.ollama_client: OllamaClientService = None
+
+        self.system_prompt: str = None
+        self.system_prompt_suffix_to_store: str = None
+
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
 
@@ -53,6 +60,18 @@ class BaseAgent(OllamaClientService):
         if not self._auth_controller:
             self._auth_controller = AuthController.get_component()
         return self._auth_controller
+
+    async def initialize(self):
+        """
+        Each agent implementation needs to override this.
+        Typically configuring ollama client etc tasks will be called in this step.
+        Example at the end of this file.
+        """
+        raise NotImplementedError()
+
+    async def aclose(self):
+        await self.ollama_client.unload_model()
+        await self.ollama_client.aclose()
 
     async def initialize_chat_thread(
         self,
@@ -119,12 +138,10 @@ class BaseAgent(OllamaClientService):
         system_prompt_params["stored_suffix"] = full_messages[0].content
         if message_sent_at:
             system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
-            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p")
+            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
         full_messages[0].content = self.system_prompt.format(**system_prompt_params)
 
-        return await self.ollama_chat_api(
-            OllamaChatRequest(model=self.model, messages=full_messages, stream=False)
-        )
+        return await self.ollama_client.chat(OllamaChatRequest(messages=full_messages, stream=False))
 
     async def chat_and_store_by_user(
         self,
@@ -186,17 +203,20 @@ class BaseAgent(OllamaClientService):
 class MainAgent(BaseAgent):
     def __init__(self, **kw):
         super().__init__(**kw)
+        self.enabled = _config.main_agent_enabled
 
+    async def initialize(self):
         with open(_config.main_agent_system_prompt_path) as file:
-            sys_prompt = file.read()
+            self.system_prompt = file.read()
 
         with open(_config.main_agent_system_prompt_suffix_to_store_path) as file:
-            sys_prompt_suffix = file.read()
+            self.system_prompt_suffix_to_store = file.read()
 
-        self.configure(
+        self.ollama_client = OllamaClientService(
             _config.main_agent_ollama_base_url,
-            sys_prompt,
             _config.main_agent_ollama_model,
-            system_prompt_suffix_to_store=sys_prompt_suffix,
             api_timeout=_config.main_agent_ollama_api_timeout,
+            keep_alive=_config.main_agent_ollama_keep_alive,
+            options=_config.main_agent_ollama_extra_options,
         )
+        await self.ollama_client.load_model()

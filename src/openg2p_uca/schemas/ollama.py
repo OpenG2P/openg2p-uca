@@ -16,7 +16,6 @@ class OllamaChatMessage(BaseModel):
 
 
 class OllamaChatRequest(BaseModel):
-    model: str
     messages: list[OllamaChatMessage]
     stream: bool = False
 
@@ -26,12 +25,13 @@ class OllamaChatResponse(BaseModel):
     created_at: datetime
     message: OllamaChatMessage
     done: bool
-    total_duration: int
-    load_duration: int
-    prompt_eval_count: int
-    prompt_eval_duration: int
-    eval_count: int
-    eval_duration: int
+    done_reason: str | None = None
+    total_duration: int | None = None
+    load_duration: int | None = None
+    prompt_eval_count: int | None = None
+    prompt_eval_duration: int | None = None
+    eval_count: int | None = None
+    eval_duration: int | None = None
 
     @field_validator("created_at", mode="before")
     @classmethod
