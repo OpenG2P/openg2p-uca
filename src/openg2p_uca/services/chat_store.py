@@ -7,20 +7,11 @@ import orjson
 from openg2p_fastapi_common.service import BaseService
 
 from ..config import Settings
-from ..errors import UcaCommonException
+from ..errors import GetMessagesMissingParamsError
 from ..schemas.chat import ChatMessage, ChatThread, GetChatMessageResponse, GetChatThreadResponse
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
-
-
-class GetMessagesMissingParamsError(UcaCommonException):
-    def __init__(self, **kwargs):
-        super().__init__(
-            "G2P-UCA-102",
-            "Missing Parameters. Neither thread_id nor message_id nor user_id are specified.",
-            **kwargs,
-        )
 
 
 class ChatStoreService(BaseService):

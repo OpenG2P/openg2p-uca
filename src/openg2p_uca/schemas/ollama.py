@@ -7,17 +7,20 @@ OllamaChatMessageRole = Literal[
     "assistant",
     "user",
     "system",
+    "tool",
 ]
 
 
 class OllamaChatMessage(BaseModel):
     role: OllamaChatMessageRole
     content: str
+    tool_calls: list[dict] | None = None
 
 
 class OllamaChatRequest(BaseModel):
     messages: list[OllamaChatMessage]
     stream: bool = False
+    tools: list[dict] | None = None
 
 
 class OllamaChatResponse(BaseModel):

@@ -17,6 +17,7 @@ from .controllers.auth import AuthController
 from .controllers.chat import ChatController
 from .services.agents import BaseAgent, MainAgent
 from .services.chat_store import ChatStoreService, ESChatStoreService
+from .services.tools.box import ToolboxService
 
 
 class Initializer(BaseInitializer):
@@ -27,9 +28,10 @@ class Initializer(BaseInitializer):
         AuthController().post_init()
         OAuthController().post_init()
         ChatController().post_init()
-        MainAgent()
         if _config.chat_store_es_enabled:
             ESChatStoreService()
+        MainAgent()
+        ToolboxService()
 
     def migrate_database(self, args, **kw):
         super().migrate_database(args, **kw)
@@ -44,6 +46,8 @@ class Initializer(BaseInitializer):
                 await service.initialize()
             if isinstance(service, BaseAgent) and service.enabled:
                 await service.initialize()
+            if isinstance(service, ToolboxService) and service.enabled:
+                service.register_tools()
 
     async def fastapi_app_shutdown(self, app: FastAPI):
         await super().fastapi_app_shutdown(app)

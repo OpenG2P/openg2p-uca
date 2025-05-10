@@ -229,6 +229,7 @@ class ChatController(BaseController):
                     message=self.filter_message(msg.message), message_by=msg.message_by, sent_at=msg.sent_at
                 )
                 for msg in res.messages
+                if msg.message
             ]
         )
 

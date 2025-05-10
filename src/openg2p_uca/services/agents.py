@@ -8,33 +8,15 @@ from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.service import BaseService
 
 from ..config import Settings
-from ..errors import UcaCommonException
+from ..errors import AuthMissingUserId, ThreadIdInvalid
 from ..schemas.chat import ChatMessage, ChatThread
 from ..schemas.ollama import OllamaChatMessage, OllamaChatRequest, OllamaChatResponse
 from .chat_store import ChatStoreService
 from .ollama_client import OllamaClientService
+from .tools.box import ToolboxService
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
-
-
-class ThreadIdInvalid(UcaCommonException):
-    def __init__(self, **kwargs):
-        super().__init__(
-            "G2P-UCA-404",
-            "Thread id not found or invalid.",
-            http_status_code=400,
-            **kwargs,
-        )
-
-
-class AuthMissingUserId(UcaCommonException):
-    def __init__(self, **kwargs):
-        super().__init__(
-            "G2P-UCA-103",
-            "Missing user_id key auth credentials. Set valid value for `config.user_id_key_in_auth`.",
-            **kwargs,
-        )
 
 
 class BaseAgent(BaseService):
@@ -48,6 +30,7 @@ class BaseAgent(BaseService):
 
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
+        self._tool_box: ToolboxService = None
 
     @property
     def chat_store_service(self):
@@ -60,6 +43,12 @@ class BaseAgent(BaseService):
         if not self._auth_controller:
             self._auth_controller = AuthController.get_component()
         return self._auth_controller
+
+    @property
+    def tool_box(self):
+        if not self._tool_box:
+            self._tool_box = ToolboxService.get_component()
+        return self._tool_box
 
     async def initialize(self):
         """
@@ -112,7 +101,7 @@ class BaseAgent(BaseService):
         user_id: str | None = None,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
-    ) -> OllamaChatResponse:
+    ) -> list[OllamaChatResponse]:
         """
         Chat API. Gets past messages from the thread and sends new message to Ollama.
         """
@@ -141,7 +130,11 @@ class BaseAgent(BaseService):
             system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
         full_messages[0].content = self.system_prompt.format(**system_prompt_params)
 
-        return await self.ollama_client.chat(OllamaChatRequest(messages=full_messages, stream=False))
+        return [
+            await self.ollama_client.chat(
+                OllamaChatRequest(messages=full_messages, stream=False, tools=self.tool_box.get_tools())
+            )
+        ]
 
     async def chat_and_store_by_user(
         self,
@@ -181,17 +174,19 @@ class BaseAgent(BaseService):
                 message=message,
             )
             await self.chat_store_service.put_message(user_chat_message)
-        assistant_chat_message = ChatMessage(
-            id=str(uuid4()),
-            thread_id=thread_id,
-            user_id=user_id,
-            sent_at=res.created_at,
-            message_by=res.message.role,
-            message=res.message.content,
-        )
-        await self.chat_store_service.put_message(assistant_chat_message)
+        for msg in res:
+            chat_msg = ChatMessage(
+                id=str(uuid4()),
+                thread_id=thread_id,
+                user_id=user_id,
+                sent_at=msg.created_at,
+                message_by=msg.message.role,
+                message=msg.message.content,
+            )
+            await self.chat_store_service.put_message(chat_msg)
 
-        return assistant_chat_message
+        # Returns the last chat message to User
+        return chat_msg
 
     def get_user_id(self, auth: AuthCredentials | BasicProfile):
         try:
