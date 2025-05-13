@@ -16,6 +16,7 @@ class Settings(AuthSettings, BaseSettings):
     )
 
     openapi_title: str = "OpenG2P Unified Conversation Agent"
+    openapi_description: str = ""
     openapi_version: str = __version__
 
     auth_api_post_new_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
@@ -33,6 +34,13 @@ class Settings(AuthSettings, BaseSettings):
     main_agent_ollama_extra_options: OllamaOptions | None = None
     main_agent_system_prompt_path: str = "system_prompts/main_orchestration_agent.txt"
     main_agent_system_prompt_suffix_to_store_path: str = ""
+
+    user_id_key_in_auth: str = "sub"
+    thread_id_cookie_name: str = "thread_id"
+    thread_id_cookie_path: str = "/"
+    thread_id_cookie_secure: bool = True
+    thread_id_cookie_httponly: bool = True
+    thread_id_cookie_max_age: int | None = 3600 * 2
 
     api_message_response_filters_regex: list[str] = [r"<think>.*?</.*?>"]
     api_message_response_filters_sub: list[str] = ["", ""]

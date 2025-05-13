@@ -6,8 +6,4 @@
 [![PyPI](https://img.shields.io/pypi/v/openg2p-llm-common?label=pypi%20package)](https://pypi.org/project/openg2p-llm-common)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/openg2p-llm-common)](https://pypi.org/project/openg2p-llm-common)
 
-This library contains common components, tools & APIs related to interating with LLMs.
-
-## Licenses
-
-This repository is licensed under [MPL-2.0](LICENSE).
+This library contains common components, tools & APIs related to interacting with LLMs.

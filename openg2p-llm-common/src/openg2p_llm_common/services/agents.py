@@ -3,13 +3,10 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import orjson
-from openg2p_fastapi_auth.controllers.auth_controller import AuthController
-from openg2p_fastapi_auth.models.credentials import AuthCredentials
-from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.service import BaseService
 
 from ..config import Settings
-from ..errors import AuthMissingUserId, ThreadIdInvalid
+from ..errors import ThreadIdInvalid
 from ..schemas.chat import ChatMessage, ChatThread
 from ..schemas.ollama import OllamaChatMessage, OllamaChatRequest, OllamaChatResponse
 from .chat_store import ChatStoreService
@@ -30,7 +27,6 @@ class BaseAgent(BaseService):
         self.system_prompt_suffix_to_store: str = None
 
         self._chat_store: ChatStoreService = None
-        self._auth_controller: AuthController = None
         self._tool_box: ToolboxService = None
 
     @property
@@ -38,12 +34,6 @@ class BaseAgent(BaseService):
         if not self._chat_store:
             self._chat_store = ChatStoreService.get_component()
         return self._chat_store
-
-    @property
-    def auth_controller(self):
-        if not self._auth_controller:
-            self._auth_controller = AuthController.get_component()
-        return self._auth_controller
 
     @property
     def tool_box(self):
@@ -66,14 +56,14 @@ class BaseAgent(BaseService):
     async def initialize_chat_thread(
         self,
         thread_id: str,
-        auth: AuthCredentials,
+        user_id: str,
+        user_profile: dict | None = None,
         system_prompt_params: dict | None = None,
         initialized_at: datetime | None = None,
     ) -> ChatThread:
         initialized_at = initialized_at or datetime.now(timezone.utc)
-        profile = await self.auth_controller.get_profile(auth, online=True)
-        user_id = self.get_user_id(profile)
-        auth_params = {f"auth_{key}": val for key, val in profile.model_dump(mode="json").items()}
+        user_profile = user_profile or {}
+        auth_params = {f"auth_{key}": val for key, val in user_profile}
         auth_params["auth_user_id"] = user_id
         system_prompt_params = system_prompt_params or {}
         system_prompt_params = {**auth_params, **system_prompt_params}
@@ -150,7 +140,7 @@ class BaseAgent(BaseService):
         self,
         thread_id: str,
         message: str | None,
-        auth: AuthCredentials,
+        user_id: str,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
         past_messages: list[OllamaChatMessage] | None = None,
@@ -162,8 +152,6 @@ class BaseAgent(BaseService):
         """
         message_sent_at = message_sent_at or datetime.now(timezone.utc)
 
-        user_id = self.get_user_id(auth)
-
         # Call Chat API
         res = await self.chat(
             thread_id,
@@ -171,7 +159,8 @@ class BaseAgent(BaseService):
             user_id=user_id,
             message_sent_at=message_sent_at,
             system_prompt_params=system_prompt_params,
-            past_messages=past_messages**kw,
+            past_messages=past_messages,
+            **kw,
         )
 
         # Store original User message and assistant response
@@ -211,7 +200,7 @@ class BaseAgent(BaseService):
                 )
                 await self.chat_store_service.put_message(chat_msg)
 
-        # Returns the last chat message to User
+        # Returns the last chat message to User. TODO: Check last message is LLM Response.
         return chat_msg
 
     async def handle_tool_calls(
@@ -238,9 +227,3 @@ class BaseAgent(BaseService):
             await self.ollama_client.chat(OllamaChatRequest(messages=messages, stream=False, tools=tools))
         )
         await self.handle_tool_calls(messages, responses)
-
-    def get_user_id(self, auth: AuthCredentials | BasicProfile):
-        try:
-            return getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e

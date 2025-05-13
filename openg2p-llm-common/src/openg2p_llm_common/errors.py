@@ -16,15 +16,6 @@ class GetMessagesMissingParamsError(BaseLlmCommonException):
         )
 
 
-class AuthMissingUserId(BaseLlmCommonException):
-    def __init__(self, **kwargs):
-        super().__init__(
-            "G2P-LLM-103",
-            "Missing user_id key auth credentials. Set valid value for `config.user_id_key_in_auth`.",
-            **kwargs,
-        )
-
-
 class ToolNotFound(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(

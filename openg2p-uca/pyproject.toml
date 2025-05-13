@@ -17,6 +17,7 @@ classifiers = [
 ]
 dependencies = [
   "openg2p-llm-common",
+  "openg2p-fastapi-auth ~=1.1.2",
   "asyncpg",
   "psycopg2",
 ]

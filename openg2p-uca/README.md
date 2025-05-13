@@ -8,7 +8,3 @@
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/openg2p-uca)](https://pypi.org/project/openg2p-uca)
 
 Refer to [OpenG2P UCA](https://github.com/OpenG2P/openg2p-uca)
-
-## Licenses
-
-This repository is licensed under [MPL-2.0](LICENSE).

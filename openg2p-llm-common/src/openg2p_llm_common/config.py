@@ -31,13 +31,6 @@ class Settings(BaseSettings):
 
     default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.txt"
 
-    user_id_key_in_auth: str = "sub"
-    thread_id_cookie_name: str = "thread_id"
-    thread_id_cookie_path: str = "/"
-    thread_id_cookie_secure: bool = True
-    thread_id_cookie_httponly: bool = True
-    thread_id_cookie_max_age: int | None = 3600 * 2
-
     # Ensure this is less than Chat store's limit.
     # Example; ES has an search result limit of 10000. See index.max_result_window in ES.
     # TODO: Implement clearly.
