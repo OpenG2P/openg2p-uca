@@ -7,7 +7,7 @@ from openg2p_fastapi_common.service import BaseService
 from ..config import OllamaOptions, Settings
 from ..schemas.ollama import OllamaChatRequest, OllamaChatResponse
 
-_config = Settings.get_config()
+_config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 

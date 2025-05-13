@@ -16,8 +16,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "openg2p-fastapi-common ~=1.1.2",
-  "openg2p-fastapi-auth ~=1.1.2",
+  "openg2p-llm-common",
   "asyncpg",
   "psycopg2",
 ]

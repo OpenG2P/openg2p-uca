@@ -3,54 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, field_serializer
 
-from .ollama import OllamaChatMessageRole
-
-
-##
-## Internal APIs' schemas
-##
-class ChatThread(BaseModel):
-    id: str
-    user_id: str
-    created_at: datetime
-
-    @field_serializer("created_at")
-    def serialize_dt(self, value: datetime):
-        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
-
-
-class GetChatThreadResponse(BaseModel):
-    count: int
-    total_count: int
-    threads: list[ChatThread]
-    user_id: str | None = None
-
-
-class ChatMessage(BaseModel):
-    id: str
-    thread_id: str
-    user_id: str
-    sent_at: datetime
-    message_by: OllamaChatMessageRole
-    message: str
-    tool_name: str | None = None
-
-    @field_serializer("sent_at")
-    def serialize_dt(self, value: datetime):
-        return value.replace(tzinfo=None).isoformat(timespec="milliseconds") + "Z"
-
-
-class GetChatMessageResponse(BaseModel):
-    count: int
-    total_count: int
-    messages: list[ChatMessage]
-    user_id: str | None = None
-    thread_id: str | None = None
-
-
-##
-## User facing chat APIs' schemas
-##
 UcaChatMessageRole = Literal[
     "assistant",
     "user",

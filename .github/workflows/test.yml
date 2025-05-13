@@ -29,10 +29,12 @@ jobs:
       - name: Install test requirements
         run: |
           python -m pip install -r test-requirements.txt
-          python -m pip install -e .
+          python -m pip install -e ./openg2p-llm-common
+          python -m pip install -e ./openg2p-uca
       - name: Run test suite
         run: |
-          pytest --cov-branch --cov-report=term-missing --cov=openg2p_uca --cov=tests
+          pytest --cov-branch --cov-report=term-missing --cov=openg2p_llm_common --cov=tests openg2p-llm-common
+          pytest --cov-branch --cov-report=term-missing --cov=openg2p_uca --cov=tests openg2p-uca --cov-append
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:

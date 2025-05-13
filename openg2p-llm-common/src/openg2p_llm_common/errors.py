@@ -1,52 +1,52 @@
 from openg2p_fastapi_common.errors import BaseAppException
 
 
-class UcaCommonException(BaseAppException):
+class BaseLlmCommonException(BaseAppException):
     """
-    Common UCA Exception
+    Common LLM Exception Base
     """
 
 
-class GetMessagesMissingParamsError(UcaCommonException):
+class GetMessagesMissingParamsError(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(
-            "G2P-UCA-102",
+            "G2P-LLM-102",
             "Missing Parameters. Neither thread_id nor message_id nor user_id are specified.",
             **kwargs,
         )
 
 
-class AuthMissingUserId(UcaCommonException):
+class AuthMissingUserId(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(
-            "G2P-UCA-103",
+            "G2P-LLM-103",
             "Missing user_id key auth credentials. Set valid value for `config.user_id_key_in_auth`.",
             **kwargs,
         )
 
 
-class ToolNotFound(UcaCommonException):
+class ToolNotFound(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(
-            "G2P-UCA-104",
+            "G2P-LLM-104",
             "Tool with the given name not found.",
             **kwargs,
         )
 
 
-class ToolInvalidRequestResponse(UcaCommonException):
+class ToolInvalidRequestResponse(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(
-            "G2P-UCA-105",
+            "G2P-LLM-105",
             "Invalid request or response type defined in the Tool.",
             **kwargs,
         )
 
 
-class ThreadIdInvalid(UcaCommonException):
+class ThreadIdInvalid(BaseLlmCommonException):
     def __init__(self, **kwargs):
         super().__init__(
-            "G2P-UCA-404",
+            "G2P-LLM-404",
             "Thread id not found or invalid.",
             http_status_code=400,
             **kwargs,

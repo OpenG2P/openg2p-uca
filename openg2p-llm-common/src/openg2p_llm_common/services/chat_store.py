@@ -10,7 +10,7 @@ from ..config import Settings
 from ..errors import GetMessagesMissingParamsError
 from ..schemas.chat import ChatMessage, ChatThread, GetChatMessageResponse, GetChatThreadResponse
 
-_config = Settings.get_config()
+_config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 

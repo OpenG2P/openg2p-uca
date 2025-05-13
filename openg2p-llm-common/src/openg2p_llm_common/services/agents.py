@@ -16,7 +16,7 @@ from .chat_store import ChatStoreService
 from .ollama_client import OllamaClientService
 from .tools.box import ToolboxService
 
-_config = Settings.get_config()
+_config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
@@ -244,25 +244,3 @@ class BaseAgent(BaseService):
             return getattr(auth, _config.user_id_key_in_auth)
         except Exception as e:
             raise AuthMissingUserId() from e
-
-
-class MainAgent(BaseAgent):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self.enabled = _config.main_agent_enabled
-
-    async def initialize(self):
-        with open(_config.main_agent_system_prompt_path) as file:
-            self.system_prompt = file.read()
-
-        with open(_config.main_agent_system_prompt_suffix_to_store_path) as file:
-            self.system_prompt_suffix_to_store = file.read()
-
-        self.ollama_client = OllamaClientService(
-            _config.main_agent_ollama_base_url,
-            _config.main_agent_ollama_model,
-            api_timeout=_config.main_agent_ollama_api_timeout,
-            keep_alive=_config.main_agent_ollama_keep_alive,
-            options=_config.main_agent_ollama_extra_options,
-        )
-        await self.ollama_client.load_model()

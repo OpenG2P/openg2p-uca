@@ -9,7 +9,7 @@ from ...errors import ToolNotFound
 from ...schemas.tools import ToolBaseResponse
 from .base import BaseTool
 
-_config = Settings.get_config()
+_config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
