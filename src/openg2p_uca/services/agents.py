@@ -1,7 +1,8 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
+import orjson
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
@@ -101,13 +102,17 @@ class BaseAgent(BaseService):
         user_id: str | None = None,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
-    ) -> list[OllamaChatResponse]:
+        past_messages: list[OllamaChatMessage] | None = None,
+    ) -> list[OllamaChatResponse | OllamaChatMessage]:
         """
         Chat API. Gets past messages from the thread and sends new message to Ollama.
         """
-        full_messages = await self.chat_store_service.get_messages(
-            thread_id=thread_id, user_id=user_id, limit=-1, sort="asc"
-        )
+        if past_messages is None:
+            full_messages = await self.chat_store_service.get_messages(
+                thread_id=thread_id, user_id=user_id, limit=-1, sort="asc"
+            )
+        else:
+            full_messages = past_messages
 
         if not full_messages.messages:
             raise ThreadIdInvalid()
@@ -130,11 +135,16 @@ class BaseAgent(BaseService):
             system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
         full_messages[0].content = self.system_prompt.format(**system_prompt_params)
 
-        return [
+        ollama_res = [
             await self.ollama_client.chat(
-                OllamaChatRequest(messages=full_messages, stream=False, tools=self.tool_box.get_tools())
+                OllamaChatRequest(
+                    messages=full_messages, stream=False, tools=self.tool_box.get_ollama_tools()
+                )
             )
         ]
+        full_messages.append(ollama_res[0].message)
+        await self.handle_tool_calls(full_messages, ollama_res)
+        return ollama_res
 
     async def chat_and_store_by_user(
         self,
@@ -143,6 +153,7 @@ class BaseAgent(BaseService):
         auth: AuthCredentials,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
+        past_messages: list[OllamaChatMessage] | None = None,
         **kw,
     ) -> ChatMessage:
         """
@@ -160,7 +171,7 @@ class BaseAgent(BaseService):
             user_id=user_id,
             message_sent_at=message_sent_at,
             system_prompt_params=system_prompt_params,
-            **kw,
+            past_messages=past_messages**kw,
         )
 
         # Store original User message and assistant response
@@ -175,18 +186,58 @@ class BaseAgent(BaseService):
             )
             await self.chat_store_service.put_message(user_chat_message)
         for msg in res:
-            chat_msg = ChatMessage(
-                id=str(uuid4()),
-                thread_id=thread_id,
-                user_id=user_id,
-                sent_at=msg.created_at,
-                message_by=msg.message.role,
-                message=msg.message.content,
-            )
-            await self.chat_store_service.put_message(chat_msg)
+            if isinstance(msg, OllamaChatResponse):
+                message_sent_at = msg.created_at
+                chat_msg = ChatMessage(
+                    id=str(uuid4()),
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    sent_at=message_sent_at,
+                    message_by=msg.message.role,
+                    message=msg.message.content,
+                    tool_name=msg.message.name,
+                )
+                await self.chat_store_service.put_message(chat_msg)
+            elif isinstance(msg, OllamaChatMessage):
+                message_sent_at += timedelta(milliseconds=1)
+                chat_msg = ChatMessage(
+                    id=str(uuid4()),
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    sent_at=message_sent_at,
+                    message_by=msg.role,
+                    message=msg.content,
+                    tool_name=msg.name,
+                )
+                await self.chat_store_service.put_message(chat_msg)
 
         # Returns the last chat message to User
         return chat_msg
+
+    async def handle_tool_calls(
+        self, messages: list[OllamaChatMessage], responses: list[OllamaChatResponse | OllamaChatMessage]
+    ):
+        """
+        Recursive function that handles the Ollama tool_calls requests, sends the tool response to ollama.
+        Receives tools calls requests again from ollama and repeats the process until no tool_calls requested by ollama.
+        """
+        if not (
+            len(responses) > 1
+            and isinstance(responses[-1], OllamaChatResponse)
+            and responses[-1].message.tool_calls
+        ):
+            return
+        tools = self.tool_box.get_ollama_tools()
+        tool_res = await self.tool_box.call_tools_from_ollama(responses[-1].message.tool_calls)
+        for msg in tool_res:
+            tool_msg = orjson.dumps(msg.model_dump(mode="json")).decode()
+            tool_msg = OllamaChatMessage(role="tool", name=msg.tool_name, content=tool_msg)
+            messages.append(tool_msg)
+            responses.append(tool_msg)
+        responses.append(
+            await self.ollama_client.chat(OllamaChatRequest(messages=messages, stream=False, tools=tools))
+        )
+        await self.handle_tool_calls(messages, responses)
 
     def get_user_id(self, auth: AuthCredentials | BasicProfile):
         try:

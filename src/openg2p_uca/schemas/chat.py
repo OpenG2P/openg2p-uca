@@ -33,6 +33,7 @@ class ChatMessage(BaseModel):
     sent_at: datetime
     message_by: OllamaChatMessageRole
     message: str
+    tool_name: str | None = None
 
     @field_serializer("sent_at")
     def serialize_dt(self, value: datetime):

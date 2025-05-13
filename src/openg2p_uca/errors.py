@@ -34,6 +34,15 @@ class ToolNotFound(UcaCommonException):
         )
 
 
+class ToolInvalidRequestResponse(UcaCommonException):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "G2P-UCA-105",
+            "Invalid request or response type defined in the Tool.",
+            **kwargs,
+        )
+
+
 class ThreadIdInvalid(UcaCommonException):
     def __init__(self, **kwargs):
         super().__init__(

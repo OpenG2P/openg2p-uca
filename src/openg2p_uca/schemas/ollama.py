@@ -14,7 +14,8 @@ OllamaChatMessageRole = Literal[
 class OllamaChatMessage(BaseModel):
     role: OllamaChatMessageRole
     content: str
-    tool_calls: list[dict] | None = None
+    name: str | None = None  # tool name to be passed while sending tool response back to ollama
+    tool_calls: list[dict] | None = None  # Only found in ollama response
 
 
 class OllamaChatRequest(BaseModel):

@@ -95,6 +95,7 @@ class ESChatStoreService(ChatStoreService):
                     "sent_at": {"type": "date", "format": "strict_date_time"},
                     "message_by": {"type": "keyword"},
                     "message": {"type": "text"},
+                    "tool_name": {"type": "keyword"},
                 }
             },
         )

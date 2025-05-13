@@ -46,8 +46,6 @@ class Initializer(BaseInitializer):
                 await service.initialize()
             if isinstance(service, BaseAgent) and service.enabled:
                 await service.initialize()
-            if isinstance(service, ToolboxService) and service.enabled:
-                service.register_tools()
 
     async def fastapi_app_shutdown(self, app: FastAPI):
         await super().fastapi_app_shutdown(app)
