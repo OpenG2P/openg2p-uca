@@ -1,11 +1,11 @@
 name: openapi publish on push
 
 on:
-  # push:
-  #   branches:
-  #     - "**"
-  #   tags-ignore:
-  #     - '**'
+  push:
+    branches:
+      - "**"
+    tags-ignore:
+      - '**'
   workflow_dispatch:
 
 jobs:
