@@ -1,0 +1,41 @@
+name: Test and coverage
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test with ${{ matrix.py }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        py:
+          - "3.10"
+        os:
+          - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup python for test ${{ matrix.py }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.py }}
+      - name: Install test requirements
+        run: |
+          python -m pip install -r test-requirements.txt
+          python -m pip install -e ./openg2p-llm-common
+          python -m pip install -e ./openg2p-uca
+      - name: Run test suite
+        run: |
+          pytest --cov-branch --cov-report=term-missing --cov=openg2p_llm_common --cov=tests openg2p-llm-common
+          pytest --cov-branch --cov-report=term-missing --cov=openg2p_uca --cov=tests openg2p-uca --cov-append
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

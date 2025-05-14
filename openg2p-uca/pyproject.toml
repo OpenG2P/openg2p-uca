@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openg2p-uca"
+authors = [
+  { name="OpenG2P", email="info@openg2p.org" },
+]
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "openg2p-llm-common",
+  "openg2p-fastapi-auth ~=1.1.2",
+  "asyncpg",
+  "psycopg2",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://openg2p.org"
+Documentation = "https://docs.openg2p.org/"
+Repository = "https://github.com/OpenG2P/openg2p-uca"
+Source = "https://github.com/OpenG2P/openg2p-uca"
+
+[tool.hatch.version]
+path = "src/openg2p_uca/__init__.py"
