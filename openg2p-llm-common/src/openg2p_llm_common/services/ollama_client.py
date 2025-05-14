@@ -1,4 +1,5 @@
 import logging
+import re
 
 import httpx
 import orjson
@@ -19,6 +20,9 @@ class OllamaClientService(BaseService):
         api_timeout: int | None = None,
         keep_alive: int | None = None,
         options: OllamaOptions | None = None,
+        res_filters_regex: list[str] | None = None,
+        res_filters_sub: list[str] | None = None,
+        res_filters_flags: int | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -30,6 +34,10 @@ class OllamaClientService(BaseService):
         self.api_timeout = api_timeout
         self.keep_alive = keep_alive
         self.options = options
+
+        self.res_filters_regex = res_filters_regex
+        self.res_filters_sub = res_filters_sub
+        self.res_filters_flags = res_filters_flags
 
     async def aclose(self):
         await self.httpx_client.aclose()
@@ -75,5 +83,21 @@ class OllamaClientService(BaseService):
             content=orjson.dumps(httpx_req),
             timeout=self.api_timeout,
         )
-        res.raise_for_status()
-        return OllamaChatResponse.model_validate(orjson.loads(res.text))
+        try:
+            res.raise_for_status()
+        except Exception:
+            _logger.exception("Ollama Client Error Encountered. %s", res.text)
+            raise
+        res = OllamaChatResponse.model_validate(orjson.loads(res.text))
+        self.filter_response(res)
+        return res
+
+    def filter_response(self, response: OllamaChatResponse, strip: bool = True):
+        flags = self.res_filters_flags
+        message = response.message.content
+        if message and self.res_filters_regex:
+            for regex, subst in zip(self.res_filters_regex, self.res_filters_sub):
+                message = re.sub(regex, subst, message, flags=flags)
+                if strip:
+                    message = message.strip()
+            response.message.content = message

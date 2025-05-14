@@ -101,29 +101,23 @@ class BaseAgent(BaseService):
             full_messages = await self.chat_store_service.get_messages(
                 thread_id=thread_id, user_id=user_id, limit=-1, sort="asc"
             )
+            full_messages = [
+                OllamaChatMessage(role=msg.message_by, content=msg.message) for msg in full_messages.messages
+            ]
         else:
             full_messages = past_messages
 
-        if not full_messages.messages:
+        if not full_messages:
             raise ThreadIdInvalid()
 
         # TODO: implement limit on user chat messages according to `config.chat_store_messages_limit`.
 
-        full_messages = [
-            OllamaChatMessage(role=msg.message_by, content=msg.message) for msg in full_messages.messages
-        ]
-
         if message:
             full_messages.append(OllamaChatMessage(role="user", content=message))
 
-        # Render System Prompt
-        # TODO: Check if first message is system role.
-        system_prompt_params = system_prompt_params or {}
-        system_prompt_params["stored_suffix"] = full_messages[0].content
-        if message_sent_at:
-            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
-            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
-        full_messages[0].content = self.system_prompt.format(**system_prompt_params)
+        await self.render_system_prompt(
+            full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params
+        )
 
         ollama_res = [
             await self.ollama_client.chat(
@@ -132,7 +126,8 @@ class BaseAgent(BaseService):
                 )
             )
         ]
-        full_messages.append(ollama_res[0].message)
+        if ollama_res[0].message.content:
+            full_messages.append(ollama_res[0].message)
         await self.handle_tool_calls(full_messages, ollama_res)
         return ollama_res
 
@@ -186,7 +181,8 @@ class BaseAgent(BaseService):
                     message=msg.message.content,
                     tool_name=msg.message.name,
                 )
-                await self.chat_store_service.put_message(chat_msg)
+                if msg.message.content:
+                    await self.chat_store_service.put_message(chat_msg)
             elif isinstance(msg, OllamaChatMessage):
                 message_sent_at += timedelta(milliseconds=1)
                 chat_msg = ChatMessage(
@@ -198,7 +194,8 @@ class BaseAgent(BaseService):
                     message=msg.content,
                     tool_name=msg.name,
                 )
-                await self.chat_store_service.put_message(chat_msg)
+                if msg.content:
+                    await self.chat_store_service.put_message(chat_msg)
 
         # Returns the last chat message to User. TODO: Check last message is LLM Response.
         return chat_msg
@@ -211,13 +208,15 @@ class BaseAgent(BaseService):
         Receives tools calls requests again from ollama and repeats the process until no tool_calls requested by ollama.
         """
         if not (
-            len(responses) > 1
+            len(responses) >= 1
             and isinstance(responses[-1], OllamaChatResponse)
             and responses[-1].message.tool_calls
         ):
             return
         tools = self.tool_box.get_ollama_tools()
-        tool_res = await self.tool_box.call_tools_from_ollama(responses[-1].message.tool_calls)
+        tool_res = await self.tool_box.call_tools_from_ollama(
+            responses[-1].message.tool_calls, messages=messages
+        )
         for msg in tool_res:
             tool_msg = orjson.dumps(msg.model_dump(mode="json")).decode()
             tool_msg = OllamaChatMessage(role="tool", name=msg.tool_name, content=tool_msg)
@@ -227,3 +226,18 @@ class BaseAgent(BaseService):
             await self.ollama_client.chat(OllamaChatRequest(messages=messages, stream=False, tools=tools))
         )
         await self.handle_tool_calls(messages, responses)
+
+    async def render_system_prompt(
+        self,
+        full_messages: list[OllamaChatMessage],
+        message_sent_at: datetime | None = None,
+        system_prompt_params: dict | None = None,
+    ):
+        # Render System Prompt
+        # TODO: Check if first message is system role.
+        system_prompt_params = system_prompt_params or {}
+        system_prompt_params["stored_suffix"] = full_messages[0].content
+        if message_sent_at:
+            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
+            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
+        full_messages[0].content = self.system_prompt.format(**system_prompt_params)

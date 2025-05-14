@@ -5,6 +5,7 @@ from openg2p_fastapi_common.service import BaseService
 
 from ...config import Settings
 from ...errors import ToolInvalidRequestResponse
+from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseRequest, ToolBaseResponse
 
 _config = Settings.get_config(strict=False)
@@ -51,7 +52,9 @@ class BaseTool(BaseService):
         self.get_tool_request_response_types()  # This is called just in case response model is not generated.
         return self._tool_response_model
 
-    async def call_tool(self, request: ToolBaseRequest) -> ToolBaseResponse:
+    async def call_tool(
+        self, request: ToolBaseRequest, messages: list[OllamaChatMessage] | None = None
+    ) -> ToolBaseResponse:
         """
         To be extended by the child class
         """

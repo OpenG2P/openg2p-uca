@@ -8,9 +8,13 @@ from openg2p_fastapi_auth.controllers.oauth_controller import OAuthController
 from openg2p_fastapi_common.ping import PingController
 from openg2p_llm_common.app import Initializer as BaseInitializer
 
+from .agents.application import ApplicationAgent
+from .agents.grievance import GrievanceAgent
+from .agents.main_agent import MainAgent
+from .agents.program_info_agent import ProgramInfoAgent
 from .controllers.auth import AuthController
 from .controllers.chat import ChatController
-from .services.agents import MainAgent
+from .tools.program_info_tool import ProgramInfoTool
 
 
 class Initializer(BaseInitializer):
@@ -22,3 +26,7 @@ class Initializer(BaseInitializer):
         OAuthController().post_init()
         ChatController().post_init()
         MainAgent()
+        ProgramInfoAgent()
+        GrievanceAgent()
+        ApplicationAgent()
+        ProgramInfoTool()

@@ -1,22 +1,25 @@
 import logging
 
 from openg2p_fastapi_common.context import dbengine
+from openg2p_llm_common.services.tools.base import BaseTool
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from ...config import Settings
-from ...schemas.tools import ProgramInfo, ProgramToolRequest, ProgramToolResponse
-from .base import BaseTool
+from ..config import Settings
+from ..schemas.program_info import ProgramInfo, ProgramToolRequest, ProgramToolResponse
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ProgramInfoTool(BaseTool):
-    async def call_tool(self, request: ProgramToolRequest) -> ProgramToolResponse:
+    def get_description(self):
+        return "Retrieves information about all the programs."
+
+    async def call_tool(self, request: ProgramToolRequest, messages=None) -> ProgramToolResponse:
         async_session_maker = async_sessionmaker(dbengine.get())
         async with async_session_maker() as session:
-            stmt = text("SELECT name, description from g2p_program")
+            stmt = text("SELECT name, description from g2p_program where state='active' and active = True")
 
             result = await session.execute(stmt)
 

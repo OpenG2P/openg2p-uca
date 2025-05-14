@@ -3,7 +3,7 @@ from openg2p_fastapi_auth.controllers.auth_controller import AuthController as B
 from openg2p_fastapi_auth.models.orm.login_provider import LoginProvider
 
 from ..config import Settings
-from ..models.auth_oauth_provider import AuthOauthProviderORM
+from ..orm.auth_oauth_provider import AuthOauthProviderORM
 
 _config = Settings.get_config()
 
