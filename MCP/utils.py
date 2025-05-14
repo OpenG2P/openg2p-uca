@@ -25,15 +25,15 @@ class OllamaClient:
         self.base_url = base_url
         self.model = model
         self.temperature = temperature
-        self.thread_histories = {}
+        # self.thread_histories = {}
         logger.info(f"OllamaClient initialized with model: {model}, temperature: {temperature}")
     
     def generate(self, system_prompt: str, prompt: str, thread_id: str = "default") -> str:
         """Generate a response using the Ollama API."""
         try:
             # Initialize thread history if it doesn't exist
-            if thread_id not in self.thread_histories:
-                self.thread_histories[thread_id] = []
+            # if thread_id not in self.thread_histories:
+            #     self.thread_histories[thread_id] = []
             
             # Prepare the request
             url = f"{self.base_url}/api/chat"
@@ -41,7 +41,7 @@ class OllamaClient:
                 "model": self.model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    *self.thread_histories[thread_id],
+                    # *self.thread_histories[thread_id],
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": self.temperature,
@@ -58,12 +58,12 @@ class OllamaClient:
             assistant_message = result["message"]["content"]
             
             # Update thread history
-            self.thread_histories[thread_id].append({"role": "user", "content": prompt})
-            self.thread_histories[thread_id].append({"role": "assistant", "content": assistant_message})
+            # self.thread_histories[thread_id].append({"role": "user", "content": prompt})
+            # self.thread_histories[thread_id].append({"role": "assistant", "content": assistant_message})
             
             # Keep history manageable
-            if len(self.thread_histories[thread_id]) > 10:
-                self.thread_histories[thread_id] = self.thread_histories[thread_id][-10:]
+            # if len(self.thread_histories[thread_id]) > 10:
+            #     self.thread_histories[thread_id] = self.thread_histories[thread_id][-10:]
             
             logger.debug(f"Generated response for thread {thread_id} (length: {len(assistant_message)})")
             return assistant_message
@@ -72,11 +72,11 @@ class OllamaClient:
             logger.error(f"Error generating response: {e}")
             return f"Error: {e}"
     
-    def clear_thread(self, thread_id: str):
-        """Clear the conversation history for a thread."""
-        if thread_id in self.thread_histories:
-            self.thread_histories[thread_id] = []
-            logger.info(f"Cleared thread history for {thread_id}")
+    # def clear_thread(self, thread_id: str):
+    #     """Clear the conversation history for a thread."""
+    #     if thread_id in self.thread_histories:
+    #         self.thread_histories[thread_id] = []
+    #         logger.info(f"Cleared thread history for {thread_id}")
 
 class SQLDatabaseTool:
     """Utility for working with SQLite databases."""

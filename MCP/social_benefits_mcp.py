@@ -584,13 +584,24 @@ If it uses pronouns like "it", "this program", "that", it's likely a follow-up.
         Uses LLM to classify the query intent and extract entities.
         """
         # Create prompt for intent analysis
-        prompt = f"""Analyze this user query: "{query}"
+        prompt = f"""You are an intent analysis system for a Social Benefits Assistant. Your task is to understand the user's intent and classify it appropriately.
 
-Extract the following information (respond in JSON format):
+Analyze this user query: "{query}"
+
+Classify the intent and respond in JSON format with these fields:
 
 1. primary_intent: ONE of ["greeting", "program_info", "status_check", "grievance", "unclear"]
+   - "greeting": Simple greetings, hellos, or initial contact
+   - "program_info": Questions about benefits, eligibility, or available programs
+   - "status_check": Queries about application status, tracking, or updates
+   - "grievance": Complaints, issues, or problems with benefits
+   - "unclear": Ambiguous queries or when user hasn't specified their needs
 
 2. confidence: number between 0-1 indicating how confident you are in this classification
+   - Use high confidence (0.8-1.0) for clear intents
+   - Use medium confidence (0.6-0.8) for somewhat clear intents
+   - Use low confidence (0.3-0.6) for ambiguous queries
+   - Use very low confidence (<0.3) for completely unclear queries
 
 3. entities: {{
    "user_id": USER### format if present,
@@ -598,8 +609,21 @@ Extract the following information (respond in JSON format):
    "demographic_info": any demographic information like age, gender, marital status, income level, etc.
 }}
 
-Examples of status check phrases: "track application", "status", "where is my application"
-Examples of grievance phrases: "issue", "problem", "complaint", "not working"
+Examples of how to classify:
+- "hi" -> greeting, high confidence
+- "hello there" -> greeting, high confidence
+- "what programs can I get?" -> program_info, high confidence
+- "tell me about benefits" -> program_info, high confidence
+- "where is my application?" -> status_check, high confidence
+- "i have a problem with my benefits" -> grievance, high confidence
+- "help" -> unclear, low confidence
+- "what can you do?" -> unclear, low confidence
+
+Remember:
+- Be conservative in your confidence scores
+- When in doubt, classify as "unclear" with low confidence
+- Only use high confidence when the intent is very clear
+- Consider the natural flow of conversation
 """
         
         # Use ANALYZE system prompt for intent classification
@@ -939,7 +963,21 @@ Examples of grievance phrases: "issue", "problem", "complaint", "not working"
             logger.info(f"Query decision: {decision}")
             
             # Step 2: Route based on intent
-            if decision["intent"] == "unclear":
+            if decision["intent"] == "greeting":
+                # Handle greetings with a welcome message
+                welcome_message = """Hello! I'm your Social Benefits Assistant. I can help you with:
+
+1. Finding social benefit programs you may be eligible for
+2. Checking your eligibility for specific programs
+3. Filing grievances or checking the status of your applications
+
+What would you like help with today?"""
+                
+                # Add assistant message to conversation history
+                self.conversation_manager.update_conversation_history(thread_id, "assistant", welcome_message)
+                return welcome_message
+                
+            elif decision["intent"] == "unclear":
                 # Handle unclear queries with clarification prompt
                 prompt_result = await self.get_prompt("clarification", {
                     "query": query
@@ -1395,12 +1433,12 @@ Examples of grievance phrases: "issue", "problem", "complaint", "not working"
         # Clear the conversation context
         self.conversation_manager.clear_thread(thread_id)
         
-        # Clear Ollama conversation histories
-        self.ollama_client.clear_thread(thread_id)
-        self.ollama_client.clear_thread(f"{thread_id}_intent_analysis")
-        self.ollama_client.clear_thread(f"{thread_id}_followup_analysis")
-        self.ollama_client.clear_thread(f"{thread_id}_eligibility_formatter")
-        self.ollama_client.clear_thread(f"{thread_id}_grievance_formatter")
+        # # Clear Ollama conversation histories
+        # self.ollama_client.clear_thread(thread_id)
+        # self.ollama_client.clear_thread(f"{thread_id}_intent_analysis")
+        # self.ollama_client.clear_thread(f"{thread_id}_followup_analysis")
+        # self.ollama_client.clear_thread(f"{thread_id}_eligibility_formatter")
+        # self.ollama_client.clear_thread(f"{thread_id}_grievance_formatter")
         
         logger.info(f"Conversation reset complete for thread_id: {thread_id}")
     
