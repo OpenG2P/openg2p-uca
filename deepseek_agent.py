@@ -14,10 +14,20 @@ from langchain_community.vectorstores import FAISS
 # ------------------ Core Components ------------------
 
 class OllamaClient:
-    """Ollama API client with conversation history management."""
+    """Ollama API client with conversation history management.
+    
+    This client handles communication with the Ollama API server,
+    maintains conversation history, and manages thread-specific contexts.
+    """
     
     def __init__(self, base_url: str = "http://localhost:11434", model: str = "deepseek-r1:8b", temperature: float = 0.1):
-        """Initialize the Ollama client."""
+        """Initialize the Ollama client.
+        
+        Args:
+            base_url: Base URL for the Ollama API
+            model: Name of the model to use
+            temperature: Temperature for response generation (0.0-1.0)
+        """
         self.base_url = base_url
         self.model = model
         self.temperature = temperature
@@ -37,13 +47,29 @@ class OllamaClient:
             print("Will attempt to use the server anyway when needed.")
     
     def _get_thread(self, thread_id: str) -> List[Dict[str, str]]:
-        """Get or initialize a conversation thread."""
+        """Get or initialize a conversation thread.
+        
+        Args:
+            thread_id: Unique identifier for the conversation thread
+            
+        Returns:
+            List of message dictionaries for the thread
+        """
         if thread_id not in self.conversations:
             self.conversations[thread_id] = []
         return self.conversations[thread_id]
     
     def generate(self, system_prompt: str, prompt: str, thread_id: str = "default") -> str:
-        """Generate a response using the Ollama API with conversation history."""
+        """Generate a response using the Ollama API with conversation history.
+        
+        Args:
+            system_prompt: System instructions for the model
+            prompt: User query
+            thread_id: Unique identifier for the conversation thread
+            
+        Returns:
+            Generated response text
+        """
         try:
             # Get the conversation history for this thread
             messages = self._get_thread(thread_id)
@@ -82,15 +108,27 @@ class OllamaClient:
             return error_message
     
     def clear_thread(self, thread_id: str):
-        """Clear the conversation history for a specific thread."""
+        """Clear the conversation history for a specific thread.
+        
+        Args:
+            thread_id: Unique identifier for the conversation thread
+        """
         if thread_id in self.conversations:
             self.conversations[thread_id] = []
 
 class SQLDatabaseTool:
-    """SQLite database interface with connection pooling and error handling."""
+    """SQLite database interface with connection pooling and error handling.
+    
+    This tool provides safe, thread-friendly access to the SQLite database
+    containing program information and grievance tickets.
+    """
     
     def __init__(self, db_path: str):
-        """Initialize the SQL database tool."""
+        """Initialize the SQL database tool.
+        
+        Args:
+            db_path: Path to the SQLite database file
+        """
         self.db_path = self._resolve_db_path(db_path)
         self.lock = threading.Lock()  # Thread safety for database operations
         
@@ -98,7 +136,14 @@ class SQLDatabaseTool:
         self._validate_database()
     
     def _resolve_db_path(self, db_path: str) -> str:
-        """Resolve the database path, handling various formats."""
+        """Resolve the database path, handling various formats.
+        
+        Args:
+            db_path: Path to the SQLite database, possibly with sqlite:/// prefix
+            
+        Returns:
+            Resolved database path
+        """
         # Remove sqlite:/// prefix if present
         if db_path.startswith('sqlite:///'):
             db_path = db_path[10:]
@@ -162,7 +207,14 @@ class SQLDatabaseTool:
             print(f"Error validating database: {e}")
     
     def get_program_details(self, program_id: int) -> Dict:
-        """Get program details by ID."""
+        """Get program details by ID.
+        
+        Args:
+            program_id: ID of the program to retrieve
+            
+        Returns:
+            Dictionary with program details
+        """
         try:
             with self.lock, sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
@@ -175,7 +227,15 @@ class SQLDatabaseTool:
             return {}
     
     def execute_query(self, query: str, params: tuple = ()) -> List[Dict]:
-        """Execute an SQL query with parameters."""
+        """Execute an SQL query with parameters.
+        
+        Args:
+            query: SQL query to execute
+            params: Query parameters
+            
+        Returns:
+            List of result dictionaries
+        """
         try:
             with self.lock, sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
@@ -192,7 +252,16 @@ class SQLDatabaseTool:
             return [{"error": str(e)}]
     
     def create_grievance_ticket(self, user_id: str, program_id: int, description: str) -> Dict:
-        """Create a new grievance ticket."""
+        """Create a new grievance ticket.
+        
+        Args:
+            user_id: User identifier
+            program_id: ID of the program related to the grievance
+            description: Description of the grievance
+            
+        Returns:
+            Dictionary with ticket information
+        """
         try:
             # Generate ticket number
             now = datetime.datetime.now()
@@ -232,11 +301,22 @@ class SQLDatabaseTool:
 # ------------------ Agent Implementations ------------------
 
 class ProgramAgent:
-    """Specialist agent for program eligibility inquiries using LangChain FAISS."""
+    """Specialist agent for program eligibility inquiries using LangChain FAISS.
+    
+    This agent handles queries about programs, eligibility, and benefits by retrieving
+    information from a FAISS vector store and SQL database.
+    """
     
     def __init__(self, db_tool: SQLDatabaseTool, ollama: OllamaClient, 
                  faiss_index_path: str, embeddings_model: str = "all-MiniLM-L6-v2"):
-        """Initialize the Program Agent."""
+        """Initialize the Program Agent.
+        
+        Args:
+            db_tool: SQLDatabaseTool instance
+            ollama: OllamaClient instance
+            faiss_index_path: Path to the FAISS index
+            embeddings_model: Name of the embeddings model
+        """
         self.db_tool = db_tool
         self.ollama = ollama
         
@@ -285,45 +365,26 @@ INSTRUCTIONS:
    - Application process and required documents
    - Next steps for the user
 
-4. CONTEXTUAL AWARENESS:
-   - Consider previous messages in the conversation
-   - If this is a follow-up providing additional user information, update your assessment
-   - Explicitly reference how the new information affects eligibility
+4. QUALITY STANDARDS:
+   - Use plain language that anyone can understand
+   - Be thorough but concise (2-3 paragraphs maximum)
+   - For multiple programs, list in order of relevance
+   - Include specific numerical values when available (e.g., income thresholds)
 
-Remember: Your goal is to help users navigate complex benefit systems with accurate, understandable information."""
+Remember: Your goal is to help users navigate complex benefit systems with clear, accurate information."""
     
-    def process(self, query: str, thread_id: str, is_followup=False, previous_context=None) -> str:
-        """Process a program information query with context awareness.
+    def process(self, query: str, thread_id: str) -> str:
+        """Process a program information query.
         
         Args:
             query: User query
             thread_id: Thread identifier
-            is_followup: Whether this is a follow-up to a previous query
-            previous_context: Previous response context
             
         Returns:
             Generated response
         """
         try:
-            # Handle follow-up queries with context
-            if is_followup and previous_context:
-                print(f"Processing follow-up query with context: {query}")
-                
-                # Create an enriched prompt that combines previous context with new info
-                enriched_prompt = f"""
-                Previous conversation context: {previous_context}
-                
-                User has now provided additional information: {query}
-                
-                Please update your previous assessment based on this new information.
-                Focus specifically on how this new detail affects eligibility for the programs
-                you previously mentioned. Maintain continuity with your previous response.
-                """
-                
-                # Generate response that builds on previous context
-                return self.ollama.generate(self.system_prompt, enriched_prompt, f"{thread_id}_program")
-            
-            # Standard query processing for new queries
+            # Use LangChain's retriever to get relevant documents
             print(f"Searching FAISS for: {query}")
             documents = self.retriever.get_relevant_documents(query)
             
@@ -369,10 +430,19 @@ Remember: Your goal is to help users navigate complex benefit systems with accur
             return "I encountered an error while retrieving program information. Please try again or rephrase your question."
 
 class GrievanceAgent:
-    """Specialist agent for handling grievances and complaints."""
+    """Specialist agent for handling grievances and complaints.
+    
+    This agent processes user complaints about programs, creates support tickets,
+    and provides guidance on the resolution process.
+    """
     
     def __init__(self, db_tool: SQLDatabaseTool, ollama: OllamaClient):
-        """Initialize the Grievance Agent."""
+        """Initialize the Grievance Agent.
+        
+        Args:
+            db_tool: SQLDatabaseTool instance
+            ollama: OllamaClient instance
+        """
         self.db_tool = db_tool
         self.ollama = ollama
         
@@ -398,70 +468,124 @@ INSTRUCTIONS:
    - Set clear expectations about timeframes for resolution (3-5 business days)
    - Provide contact options for urgent follow-up if needed
 
+4. TONE AND APPROACH:
+   - Be empathetic but professional
+   - Avoid making promises about specific outcomes
+   - Focus on the process and next steps rather than resolving the issue immediately
+   - Maintain a solution-oriented approach throughout
+
 Remember: Your goal is to ensure users feel heard and understood while providing a clear path forward for resolving their grievance."""
     
-    def process(self, query: str, thread_id: str, is_followup=False, previous_context=None) -> str:
-        """Process a grievance query with context awareness."""
+    def _analyze_complaint(self, complaint: str) -> Dict:
+        """Analyze a complaint to extract key information.
+        
+        Args:
+            complaint: User's complaint text
+            
+        Returns:
+            Dictionary with extracted information
+        """
+        # Use LLM to extract program and issue information
+        analysis_prompt = f"""
+        Analyze this complaint and extract the following information:
+        
+        Complaint: {complaint}
+        
+        Extract these key details:
+        1. Which program or benefit is the complaint about? (If unclear, say "Unspecified")
+        2. What type of issue is it? (Payment, Eligibility, Application, Other)
+        3. Are there specific dates mentioned? (Format: YYYY-MM-DD)
+        4. Is there enough information to process this complaint? (Yes/No)
+        5. If information is missing, what specifically should we ask about?
+        
+        Format your response as a JSON object with these fields:
+        program, issue_type, dates, has_enough_info, missing_info
+        """
+        
         try:
-            # Handle follow-up queries with context
-            if is_followup and previous_context:
-                print(f"Processing follow-up grievance with context: {query}")
+            analysis_response = self.ollama.generate("You are a data extraction assistant. Extract information in the requested format.", analysis_prompt, "analysis")
+            
+            # Try to parse the JSON response
+            # Extract JSON from the response (in case there's additional text)
+            json_start = analysis_response.find('{')
+            json_end = analysis_response.rfind('}') + 1
+            
+            if json_start >= 0 and json_end > json_start:
+                json_str = analysis_response[json_start:json_end]
+                analysis = json.loads(json_str)
+            else:
+                # Fallback if JSON parsing fails
+                analysis = {
+                    "program": "Unspecified",
+                    "issue_type": "Other",
+                    "dates": [],
+                    "has_enough_info": "No",
+                    "missing_info": "Please provide more details about your complaint."
+                }
+            
+            return analysis
+            
+        except Exception as e:
+            print(f"Error analyzing complaint: {e}")
+            return {
+                "program": "Unspecified",
+                "issue_type": "Other",
+                "dates": [],
+                "has_enough_info": "No",
+                "missing_info": "Error analyzing complaint. Please provide more details."
+            }
+    
+    def process(self, query: str, thread_id: str) -> str:
+        """Process a grievance query.
+        
+        Args:
+            query: User query
+            thread_id: Thread identifier
+            
+        Returns:
+            Generated response
+        """
+        try:
+            # Analyze the complaint
+            analysis = self._analyze_complaint(query)
+            
+            # If we don't have enough information, ask for more
+            if analysis.get("has_enough_info") == "No":
+                missing_info = analysis.get("missing_info", "more details about your issue")
                 
-                enriched_prompt = f"""
-                Previous conversation context: {previous_context}
-                
-                User has now provided additional information: {query}
-                
-                Please update your understanding of their grievance based on this new information.
-                If they've provided requested details, incorporate them into your response.
-                Maintain continuity with your previous interaction.
-                """
-                
-                return self.ollama.generate(self.system_prompt, enriched_prompt, f"{thread_id}_grievance")
-            
-            # Standard grievance processing
-            # Use LLM to analyze the complaint
-            analysis_prompt = f"""
-            Analyze this complaint and extract key information:
-            
-            Complaint: {query}
-            
-            1. Which program or benefit is the complaint about? (If unclear, say "Unspecified")
-            2. What type of issue is it? (Payment, Eligibility, Application, Other)
-            3. Is there enough information to process this complaint? (Yes/No)
-            4. If information is missing, what specifically should we ask about?
-            
-            Respond in a structured format that can be easily parsed.
-            """
-            
-            analysis_response = self.ollama.generate(
-                "You are a data extraction assistant. Extract structured information.",
-                analysis_prompt,
-                f"{thread_id}_analysis"
-            )
-            
-            # Parse the analysis to determine next steps
-            has_enough_info = "yes" in analysis_response.lower()
-            missing_info = "missing" in analysis_response.lower()
-            
-            if not has_enough_info or missing_info:
-                # Ask for more information
                 followup_prompt = f"""
                 The user submitted this grievance: "{query}"
                 
-                Based on analysis, we need more information to properly address this.
+                We need more information: "{missing_info}"
                 
-                Please respond empathetically, acknowledging their concern, and politely
-                ask for specific details that would help us better understand and address their grievance.
+                Please respond empathetically, acknowledging their frustration, and politely
+                ask for the specific missing information. Explain that this will help us
+                address their grievance more effectively.
                 """
                 
                 return self.ollama.generate(self.system_prompt, followup_prompt, f"{thread_id}_grievance")
             
-            # If we have enough information, create a ticket
-            # Create a ticket with available information
+            # We have enough information to create a ticket
+            # Try to find program ID if a program was mentioned
+            program = analysis.get("program", "Unspecified")
+            program_id = 0  # Default for unspecified
+            
+            if program != "Unspecified":
+                # Simple search for program ID
+                try:
+                    results = self.db_tool.execute_query(
+                        "SELECT id FROM programs WHERE name LIKE ?",
+                        (f"%{program}%",)
+                    )
+                    if results and "id" in results[0]:
+                        program_id = results[0]["id"]
+                except Exception as e:
+                    print(f"Error finding program ID: {e}")
+            
+            # Create a ticket
             ticket_info = self.db_tool.create_grievance_ticket(
                 user_id=f"user_{thread_id}",
-                program_id=0,  # Default program ID
+                program_id=program_id,
                 description=query
             )
             
@@ -469,17 +593,22 @@ Remember: Your goal is to ensure users feel heard and understood while providing
             response_prompt = f"""
             User Grievance: "{query}"
             
+            Analysis:
+            - Program: {program}
+            - Issue Type: {analysis.get("issue_type", "Other")}
+            
             Grievance Ticket Created:
             - Ticket Number: {ticket_info.get("ticket_number")}
             - Status: {ticket_info.get("status")}
             - Created At: {ticket_info.get("created_at")}
             
-            Please generate a comprehensive response that:
+            Please generate a response that:
             1. Acknowledges the user's grievance empathetically
             2. Confirms that a ticket has been created
             3. Provides the ticket number for reference
             4. Explains the next steps (review within 24-48 hours, possible follow-up)
             5. Sets expectations for resolution timeframe (typically 3-5 business days)
+            6. Offers to help with any other concerns
             """
             
             return self.ollama.generate(self.system_prompt, response_prompt, f"{thread_id}_grievance")
@@ -495,37 +624,52 @@ Remember: Your goal is to ensure users feel heard and understood while providing
             
             We've created an emergency ticket number: {ticket_number}
             
-            Please generate a response that acknowledges their issue empathetically
-            and provides this ticket number, explaining that we'll review their case promptly.
+            Please generate a response that:
+            1. Acknowledges their issue empathetically
+            2. Explains that we've created a ticket despite technical difficulties
+            3. Provides the ticket number
+            4. Apologizes for the inconvenience
+            5. Ensures them their case will be reviewed promptly
             """
             
             return self.ollama.generate(self.system_prompt, fallback_prompt, f"{thread_id}_grievance")
 
 class MainAgent:
-    """Main orchestrator agent that routes queries to specialized agents with context awareness."""
+    """Main orchestrator agent that routes queries to specialized agents.
+    
+    This agent classifies user queries and directs them to the appropriate
+    specialized agent (Program or Grievance) based on intent.
+    """
     
     def __init__(self, program_agent: ProgramAgent, grievance_agent: GrievanceAgent, ollama: OllamaClient):
-        """Initialize the Main Agent."""
+        """Initialize the Main Agent.
+        
+        Args:
+            program_agent: ProgramAgent instance
+            grievance_agent: GrievanceAgent instance
+            ollama: OllamaClient instance
+        """
         self.program_agent = program_agent
         self.grievance_agent = grievance_agent
         self.ollama = ollama
-        
-        # Initialize conversation state tracking
-        self.conversation_state = {}
         
         # Define the classifier system prompt
         self.classifier_prompt = """You are a query classification system. Your task is to accurately categorize user messages into one of three categories:
 
 1. PROGRAM_INFO: Questions about benefit programs, eligibility criteria, application processes, or available support.
    Examples: "What housing programs are available?", "Am I eligible for farmer subsidies?", "How do I apply for child support?"
-   IMPORTANT: Short follow-up messages that provide additional personal details (like age, marital status, income, location) 
-   after a previous program query should also be classified as PROGRAM_INFO.
 
 2. GRIEVANCE: Complaints, reports of issues, or requests to resolve problems with benefits.
    Examples: "I haven't received my payment", "My application was rejected unfairly", "I need to file a complaint"
 
 3. GENERAL: Greetings, casual conversation, or topics unrelated to benefit programs.
    Examples: "Hello", "How are you?", "What's the weather like?"
+
+INSTRUCTIONS:
+- Analyze the content, intent, and emotional tone of the message
+- Look for keywords indicating program queries or complaints
+- Consider context from any previous messages provided
+- Choose the MOST appropriate category
 
 RESPONSE FORMAT:
 Respond with EXACTLY one category name: PROGRAM_INFO, GRIEVANCE, or GENERAL.
@@ -546,48 +690,27 @@ Do not include any other text in your response."""
 Avoid detailed explanations of your capabilities unless specifically asked."""
     
     def process(self, query: str, thread_id: str = "default") -> str:
-        """Process a user query by routing to the appropriate agent with context awareness."""
+        """Process a user query by routing to the appropriate agent."""
         try:
-            # Get FULL conversation history
+            # Get recent conversation context for better classification
             thread_messages = self.ollama._get_thread(thread_id)
-            
-            # Retrieve conversation state for this thread
-            current_state = self.conversation_state.get(thread_id, {
-                "last_agent": None,
-                "context": None,
-                "last_query_type": None
-            })
-            
-            # Prepare context for classification including FULL history
-            context_str = "FULL CONVERSATION HISTORY:\n"
-            if thread_messages:
-                context_str += "\n".join([
-                    f"{msg['role']}: {msg['content'][:200]}..." if len(msg['content']) > 200 else f"{msg['role']}: {msg['content']}"
-                    for msg in thread_messages
+            recent_context = thread_messages[-6:] if len(thread_messages) > 0 else []
+            # Prepare context for classification
+            context_str = ""
+            if recent_context:
+                context_str = "Previous messages:\n" + "\n".join([
+                    f"{msg['role']}: {msg['content'][:100]}..." 
+                    if len(msg['content']) > 100 else f"{msg['role']}: {msg['content']}"
+                    for msg in recent_context
                 ]) + "\n\n"
-            
-            # Enhanced classification prompt with follow-up instructions
-            classification_prompt = f"""
-            {context_str}
-            
-            Current message: {query}
-            
-            IMPORTANT: If this appears to be a follow-up to a previous query about programs or benefits,
-            classify it as PROGRAM_INFO. Short responses providing requested details (like marital status, 
-            income, location) should be treated as continuing the previous PROGRAM_INFO conversation.
-            
-            Which category does this fall into?
-            """
-            
-            # Classify the query with enhanced context
+            classification_prompt = f"{context_str}Current message: {query}\n\nWhich category does this fall into?"
+            # Classify the query with strict output parsing
             classification_result = self.ollama.generate(
                 self.classifier_prompt, 
                 classification_prompt, 
                 f"{thread_id}_classifier"
             ).strip()
-            
             print(f"Raw classification: {classification_result}")
-            
             # Improved classification parsing
             query_type = "GENERAL"  # Default fallback
             clean_result = classification_result.split()[-1].strip(".").upper()
@@ -599,52 +722,14 @@ Avoid detailed explanations of your capabilities unless specifically asked."""
                     query_type = "PROGRAM_INFO"
                 elif any(word in query.lower() for word in ["complain", "grievance", "issue", "problem"]):
                     query_type = "GRIEVANCE"
-                # Special case: Check if this is likely a follow-up to previous program query
-                elif current_state.get("last_agent") == "program" and len(query.split()) <= 5:
-                    query_type = "PROGRAM_INFO"
-                    print("Detected short follow-up to previous program query")
-            
             print(f"Final classification: {query_type}")
-            
-            # Check for follow-up context
-            is_followup = False
-            if query_type == current_state.get("last_query_type"):
-                is_followup = True
-                print(f"Detected follow-up to previous {query_type} query")
-            
-            # Route queries appropriately with context awareness
+            # Route queries appropriately
             if query_type == "PROGRAM_INFO":
                 print("Routing to Program Agent...")
-                response = self.program_agent.process(
-                    query, 
-                    thread_id,
-                    is_followup=(is_followup and current_state.get("last_agent") == "program"),
-                    previous_context=current_state.get("context")
-                )
-                
-                # Update conversation state
-                self.conversation_state[thread_id] = {
-                    "last_agent": "program",
-                    "context": response,
-                    "last_query_type": "PROGRAM_INFO"
-                }
-                
+                response = self.program_agent.process(query, thread_id)
             elif query_type == "GRIEVANCE":
                 print("Routing to Grievance Agent...")
-                response = self.grievance_agent.process(
-                    query, 
-                    thread_id,
-                    is_followup=(is_followup and current_state.get("last_agent") == "grievance"),
-                    previous_context=current_state.get("context")
-                )
-                
-                # Update conversation state
-                self.conversation_state[thread_id] = {
-                    "last_agent": "grievance",
-                    "context": response,
-                    "last_query_type": "GRIEVANCE"
-                }
-                
+                response = self.grievance_agent.process(query, thread_id)
             else:
                 print("Handling as general query...")
                 # Direct response for greetings/smalltalk
@@ -656,16 +741,7 @@ Avoid detailed explanations of your capabilities unless specifically asked."""
                         query, 
                         thread_id
                     )
-                
-                # Update conversation state
-                self.conversation_state[thread_id] = {
-                    "last_agent": "general",
-                    "context": response,
-                    "last_query_type": "GENERAL"
-                }
-            
             return response
-            
         except Exception as e:
             print(f"Error in MainAgent: {e}")
             return "I apologize for the confusion. Could you please rephrase your question?"
@@ -673,7 +749,11 @@ Avoid detailed explanations of your capabilities unless specifically asked."""
 # ------------------ System Integration ------------------
 
 class AgentSystem:
-    """Integrated system that coordinates all agent components."""
+    """Integrated system that coordinates all agent components.
+    
+    This class provides a simple interface to initialize and use the
+    hierarchical agent system.
+    """
     
     def __init__(
         self,
@@ -683,7 +763,15 @@ class AgentSystem:
         temperature: float = 0.1,
         ollama_url: str = "http://localhost:11434"
     ):
-        """Initialize the agent system."""
+        """Initialize the agent system.
+        
+        Args:
+            db_path: Path to the SQLite database
+            faiss_index_path: Path to the FAISS index
+            model: Name of the Ollama model
+            temperature: Temperature for response generation
+            ollama_url: Base URL for the Ollama API
+        """
         print(f"Initializing Agent System with model: {model}")
         
         # Initialize shared components
@@ -715,24 +803,30 @@ class AgentSystem:
         print("Agent System initialization complete")
     
     def process_query(self, query: str, thread_id: str = "default") -> str:
-        """Process a user query."""
+        """Process a user query.
+        
+        Args:
+            query: User query
+            thread_id: Thread identifier
+            
+        Returns:
+            Generated response
+        """
         print(f"Processing query: {query}")
         response = self.main_agent.process(query, thread_id)
         print(f"Generated response: {response[:100]}..." if len(response) > 100 else f"Generated response: {response}")
         return response
     
     def reset_conversation(self, thread_id: str = "default"):
-        """Reset the conversation history for a thread."""
+        """Reset the conversation history for a thread.
+        
+        Args:
+            thread_id: Thread identifier
+        """
         self.ollama.clear_thread(thread_id)
         self.ollama.clear_thread(f"{thread_id}_classifier")
         self.ollama.clear_thread(f"{thread_id}_program")
         self.ollama.clear_thread(f"{thread_id}_grievance")
-        self.ollama.clear_thread(f"{thread_id}_analysis")
-        
-        # Clear conversation state
-        if hasattr(self.main_agent, 'conversation_state') and thread_id in self.main_agent.conversation_state:
-            del self.main_agent.conversation_state[thread_id]
-            
         print(f"Conversation reset for thread: {thread_id}")
 
 # ------------------ Main Function ------------------
@@ -741,7 +835,7 @@ def main():
     """Run the agent system with a command-line interface."""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Context-Aware Hierarchical Agent System")
+    parser = argparse.ArgumentParser(description="Hierarchical Agent System")
     parser.add_argument("--db", type=str, default="program_db.sqlite", help="Path to SQLite database")
     parser.add_argument("--index", type=str, default="program_db_faiss/programs_index", help="Path to FAISS index")
     parser.add_argument("--model", type=str, default="deepseek-r1:8b", help="Ollama model name")
@@ -750,7 +844,7 @@ def main():
     
     args = parser.parse_args()
     
-    print("\n==== Context-Aware Hierarchical Agent System ====\n")
+    print("\n==== Hierarchical Agent System ====\n")
     print("Initializing system components...")
     
     # Initialize the agent system
@@ -777,7 +871,7 @@ def main():
             
             # Check for special commands
             if user_input.lower() in ["quit", "exit", "bye"]:
-                print("\nThank you for using the Context-Aware Hierarchical Agent System. Goodbye!")
+                print("\nThank you for using the Hierarchical Agent System. Goodbye!")
                 break
                 
             if user_input.lower() == "reset":
