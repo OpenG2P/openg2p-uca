@@ -14,6 +14,7 @@ from openg2p_fastapi_common.controller import BaseController
 from openg2p_llm_common.errors import ThreadIdInvalid
 from openg2p_llm_common.services.chat_store import ChatStoreService
 
+from ..agents.main_agent import MainAgent
 from ..config import Settings
 from ..errors import AuthMissingUserId
 from ..schemas.chat import (
@@ -25,7 +26,6 @@ from ..schemas.chat import (
     UcaChatThreadResponse,
     UcaChatThreadsResponse,
 )
-from ..services.agents import MainAgent
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)

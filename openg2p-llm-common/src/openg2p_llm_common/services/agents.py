@@ -115,14 +115,9 @@ class BaseAgent(BaseService):
         if message:
             full_messages.append(OllamaChatMessage(role="user", content=message))
 
-        # Render System Prompt
-        # TODO: Check if first message is system role.
-        system_prompt_params = system_prompt_params or {}
-        system_prompt_params["stored_suffix"] = full_messages[0].content
-        if message_sent_at:
-            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
-            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
-        full_messages[0].content = self.system_prompt.format(**system_prompt_params)
+        await self.render_system_prompt(
+            full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params
+        )
 
         ollama_res = [
             await self.ollama_client.chat(
@@ -231,3 +226,18 @@ class BaseAgent(BaseService):
             await self.ollama_client.chat(OllamaChatRequest(messages=messages, stream=False, tools=tools))
         )
         await self.handle_tool_calls(messages, responses)
+
+    async def render_system_prompt(
+        self,
+        full_messages: list[OllamaChatMessage],
+        message_sent_at: datetime | None = None,
+        system_prompt_params: dict | None = None,
+    ):
+        # Render System Prompt
+        # TODO: Check if first message is system role.
+        system_prompt_params = system_prompt_params or {}
+        system_prompt_params["stored_suffix"] = full_messages[0].content
+        if message_sent_at:
+            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
+            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
+        full_messages[0].content = self.system_prompt.format(**system_prompt_params)
