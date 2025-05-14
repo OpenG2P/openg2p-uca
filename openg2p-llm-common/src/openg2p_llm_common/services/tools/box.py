@@ -6,6 +6,7 @@ from openg2p_fastapi_common.service import BaseService
 
 from ...config import Settings
 from ...errors import ToolNotFound
+from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseResponse
 from .base import BaseTool
 
@@ -28,7 +29,7 @@ class ToolboxService(BaseService):
             self._tool_name_map = {}
             for tool in component_registry.get():
                 if isinstance(tool, BaseTool) and tool.enabled:
-                    self._tool_name_map[tool.name] = tool
+                    self._tool_name_map[tool.get_name()] = tool
         return self._tool_name_map
 
     def get_ollama_tools(self):
@@ -55,7 +56,9 @@ class ToolboxService(BaseService):
             },
         }
 
-    async def call_each_tool_from_ollama(self, tool_call: dict[str, Any]) -> ToolBaseResponse:
+    async def call_each_tool_from_ollama(
+        self, tool_call: dict[str, Any], messages: list[OllamaChatMessage] | None = None
+    ) -> ToolBaseResponse:
         # TODO: Put validation on tool_call json.
         tool_name: str = (tool_call.get("function") or {}).get("name") or ""
         tool_args: dict[str, Any] = (tool_call.get("function") or {}).get("arguments") or {}
@@ -63,13 +66,15 @@ class ToolboxService(BaseService):
             tool = self.get_tool_name_map()[tool_name]
         except Exception as e:
             raise ToolNotFound() from e
-        res = await tool.call_tool(tool.get_request_model().model_validate(tool_args))
+        res = await tool.call_tool(tool.get_request_model().model_validate(tool_args), messages=messages)
         res.tool_name = tool_name
         return res
 
-    async def call_tools_from_ollama(self, tool_calls: list[dict[str, Any]]) -> list[ToolBaseResponse]:
+    async def call_tools_from_ollama(
+        self, tool_calls: list[dict[str, Any]], messages: list[OllamaChatMessage] | None = None
+    ) -> list[ToolBaseResponse]:
         final_res = []
         for tool_call in tool_calls:
-            res = await self.call_each_tool_from_ollama(tool_call)
+            res = await self.call_each_tool_from_ollama(tool_call, messages=messages)
             final_res.append(res)
         return final_res

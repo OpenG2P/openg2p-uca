@@ -27,5 +27,8 @@ class MainAgent(BaseAgent):
             api_timeout=_config.main_agent_ollama_api_timeout,
             keep_alive=_config.main_agent_ollama_keep_alive,
             options=_config.main_agent_ollama_extra_options,
+            res_filters_regex=_config.main_agent_ollama_response_filters_regex,
+            res_filters_sub=_config.main_agent_ollama_response_filters_sub,
+            res_filters_flags=_config.main_agent_ollama_response_filter_flags,
         )
         await self.ollama_client.load_model()

@@ -1,5 +1,3 @@
-import re
-
 from openg2p_fastapi_auth.config import ApiAuthSettings
 from openg2p_fastapi_auth.config import Settings as AuthSettings
 from openg2p_llm_common.config import OllamaOptions
@@ -26,12 +24,20 @@ class Settings(AuthSettings, BaseSettings):
     auth_api_post_new_chat_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_get_chat_messages: ApiAuthSettings = ApiAuthSettings(enabled=True)
 
+    chat_store_messages_es_index: str = "uca_messages"
+    chat_store_threads_es_index: str = "uca_threads"
+
     main_agent_enabled: bool = True
     main_agent_ollama_base_url: str = ""
     main_agent_ollama_model: str = ""
     main_agent_ollama_api_timeout: int | None = None
     main_agent_ollama_keep_alive: int | None = None
     main_agent_ollama_extra_options: OllamaOptions | None = None
+
+    main_agent_ollama_response_filters_regex: list[str] | None = None
+    main_agent_ollama_response_filters_sub: list[str] | None = None
+    main_agent_ollama_response_filter_flags: int | None = None
+
     main_agent_system_prompt_path: str = "system_prompts/main_orchestration_agent.txt"
     main_agent_system_prompt_suffix_to_store_path: str = ""
 
@@ -42,9 +48,9 @@ class Settings(AuthSettings, BaseSettings):
     thread_id_cookie_httponly: bool = True
     thread_id_cookie_max_age: int | None = 3600 * 2
 
-    api_message_response_filters_regex: list[str] = [r"<think>.*?</.*?>"]
-    api_message_response_filters_sub: list[str] = ["", ""]
-    api_message_response_filter_flags: int = re.DOTALL
+    api_message_response_filters_regex: list[str] | None = None
+    api_message_response_filters_sub: list[str] | None = None
+    api_message_response_filter_flags: int | None = None
 
     @model_validator(mode="after")
     def main_agent_config_validator(self):
@@ -58,6 +64,12 @@ class Settings(AuthSettings, BaseSettings):
             self.main_agent_ollama_keep_alive = self.default_ollama_keep_alive
         if not self.main_agent_ollama_extra_options:
             self.main_agent_ollama_extra_options = self.default_ollama_extra_options
+        if self.main_agent_ollama_response_filters_regex is None:
+            self.main_agent_ollama_response_filters_regex = self.default_ollama_response_filters_regex
+        if self.main_agent_ollama_response_filters_sub is None:
+            self.main_agent_ollama_response_filters_sub = self.default_ollama_response_filters_sub
+        if self.main_agent_ollama_response_filter_flags is None:
+            self.main_agent_ollama_response_filter_flags = self.default_ollama_response_filter_flags
         if not self.main_agent_system_prompt_suffix_to_store_path:
             self.main_agent_system_prompt_suffix_to_store_path = (
                 self.default_system_prompt_suffix_to_store_path

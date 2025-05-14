@@ -11,6 +11,7 @@ from openg2p_llm_common.app import Initializer as BaseInitializer
 from .controllers.auth import AuthController
 from .controllers.chat import ChatController
 from .services.agents import MainAgent
+from .services.program_tool import ProgramInfoTool
 
 
 class Initializer(BaseInitializer):
@@ -22,3 +23,4 @@ class Initializer(BaseInitializer):
         OAuthController().post_init()
         ChatController().post_init()
         MainAgent()
+        ProgramInfoTool()

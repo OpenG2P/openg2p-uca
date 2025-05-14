@@ -148,7 +148,7 @@ class ChatController(BaseController):
         if not thread.thread_id:
             response.delete_cookie(_config.thread_id_cookie_name)
         else:
-            user_id = self.main_agent.get_user_id(auth)
+            user_id = self.get_user_id(auth)
             res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread.thread_id)
             if len(res.threads) < 1:
                 # Raise error if thread_id doesn't exists against give user_id.
@@ -175,7 +175,7 @@ class ChatController(BaseController):
         """
         Get the current thread_id of logged in user.
         """
-        user_id = self.main_agent.get_user_id(auth)
+        user_id = self.get_user_id(auth)
         res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread_id)
         if len(res.threads) < 1:
             # Raise error if thread_id doesn't exists against give user_id.
@@ -194,7 +194,7 @@ class ChatController(BaseController):
         Get all threads of the logged in user,
         based on limit and page number and sort order.
         """
-        user_id = self.main_agent.get_user_id(auth)
+        user_id = self.get_user_id(auth)
         res = await self.chat_store_service.get_threads(user_id=user_id, page=page, limit=limit, sort=sort)
         return UcaChatThreadsResponse(
             threads=[
@@ -230,7 +230,7 @@ class ChatController(BaseController):
         Get all messages of the given thread,
         based on limit and page number and sort order.
         """
-        user_id = self.main_agent.get_user_id(auth)
+        user_id = self.get_user_id(auth)
         res = await self.chat_store_service.get_messages(
             thread_id=thread_id,
             user_id=user_id,
@@ -251,12 +251,13 @@ class ChatController(BaseController):
 
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags
-        for regex, subst in zip(
-            _config.api_message_response_filters_regex, _config.api_message_response_filters_sub
-        ):
-            message = re.sub(regex, subst, message, flags=flags)
-        if strip:
-            message = message.strip()
+        regexs = _config.api_message_response_filters_regex
+        subs = _config.api_message_response_filters_sub
+        if message and regexs:
+            for regex, subst in zip(regexs, subs):
+                message = re.sub(regex, subst, message, flags=flags)
+                if strip:
+                    message = message.strip()
         return message
 
     def get_user_id(self, auth: AuthCredentials | BasicProfile):

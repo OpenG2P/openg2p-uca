@@ -1,3 +1,5 @@
+import re
+
 from openg2p_fastapi_common.config import Settings as BaseSettings
 from pydantic import BaseModel, ConfigDict
 from pydantic_settings import SettingsConfigDict
@@ -24,10 +26,14 @@ class Settings(BaseSettings):
     openapi_version: str = __version__
 
     default_ollama_base_url: str = "http://localhost:11434"
-    default_ollama_model: str = "deepseek-r1:8b"
+    default_ollama_model: str = "qwen3:8b"
     default_ollama_api_timeout: int = 50
     default_ollama_keep_alive: int | None = -1
     default_ollama_extra_options: OllamaOptions | None = OllamaOptions()
+
+    default_ollama_response_filters_regex: list[str] = [r"<think>.*?</.*?>"]
+    default_ollama_response_filters_sub: list[str] = [""]
+    default_ollama_response_filter_flags: int = re.DOTALL
 
     default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.txt"
 
