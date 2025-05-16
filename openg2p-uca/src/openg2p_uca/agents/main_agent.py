@@ -110,7 +110,6 @@ class MainAgent(BaseAgent):
         )
 
     def get_sub_agent(self, agent_class: str) -> BaseAgent:
-        print("===> Agent Class is", agent_class)
         if agent_class == "program_info":
             return self.program_info_agent
         elif agent_class == "grievance":
