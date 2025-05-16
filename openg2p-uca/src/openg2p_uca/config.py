@@ -27,6 +27,8 @@ class Settings(AuthSettings, BaseSettings):
     chat_store_messages_es_index: str = "uca_messages"
     chat_store_threads_es_index: str = "uca_threads"
 
+    user_id_id_type: str = "NATIONAL ID TOKEN"
+
     ## Main Agent Config
     main_agent_enabled: bool = True
     main_agent_ollama_base_url: str = ""

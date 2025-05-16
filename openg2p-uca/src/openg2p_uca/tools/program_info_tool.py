@@ -19,7 +19,9 @@ class ProgramInfoTool(BaseTool):
     async def call_tool(self, request: ProgramToolRequest, messages=None) -> ProgramToolResponse:
         async_session_maker = async_sessionmaker(dbengine.get())
         async with async_session_maker() as session:
-            stmt = text("SELECT name, description from g2p_program where state='active' and active = True")
+            stmt = text(
+                "SELECT id, name, description from g2p_program where state='active' and active = True"
+            )
 
             result = await session.execute(stmt)
 

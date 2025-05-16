@@ -14,6 +14,7 @@ from .agents.main_agent import MainAgent
 from .agents.program_info_agent import ProgramInfoAgent
 from .controllers.auth import AuthController
 from .controllers.chat import ChatController
+from .tools.beneficiary import GetBeneficiaryIdTool
 from .tools.program_info_tool import ProgramInfoTool
 
 
@@ -30,3 +31,4 @@ class Initializer(BaseInitializer):
         GrievanceAgent()
         ApplicationAgent()
         ProgramInfoTool()
+        GetBeneficiaryIdTool()

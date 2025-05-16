@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 
 class ProgramInfo(BaseModel):
+    id: int
     name: str
     description: str | None
 
