@@ -97,6 +97,7 @@ class MainAgent(BaseAgent):
         ollama_res = await self.ollama_client.chat(
             OllamaChatRequest(messages=full_messages, stream=False, tools=self.tool_box.get_ollama_tools())
         )
+        print("xxxxxxxxxxxxxxxxxxxxxxx",ollama_res.message.content)
         sub_agent = self.get_sub_agent(ollama_res.message.content)
         full_messages[0].content = system_prompt_orig  # Restore system prompt to original
         return await sub_agent.chat(

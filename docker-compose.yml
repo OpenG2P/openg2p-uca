@@ -23,7 +23,7 @@ services:
       - "5601:5601"
     environment:
       - OPENSEARCH_DASHBOARDS_OPENSEARCH_URL=opensearch
-      - OPENSEARCH_DASHBOARDS_DISABLE_STRICT_CSP=yes
+      # - OPENSEARCH_DASHBOARDS_DISABLE_STRICT_CSP=yes
     depends_on:
       opensearch:
         condition: service_healthy

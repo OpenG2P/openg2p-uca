@@ -16,6 +16,7 @@ from .controllers.auth import AuthController
 from .controllers.chat import ChatController
 from .tools.beneficiary import GetBeneficiaryIdTool
 from .tools.program_info_tool import ProgramInfoTool
+from .tools.grievance_ticket import CreateGrievanceTicketTool 
 
 
 class Initializer(BaseInitializer):
@@ -32,3 +33,4 @@ class Initializer(BaseInitializer):
         ApplicationAgent()
         ProgramInfoTool()
         GetBeneficiaryIdTool()
+        CreateGrievanceTicketTool()  
