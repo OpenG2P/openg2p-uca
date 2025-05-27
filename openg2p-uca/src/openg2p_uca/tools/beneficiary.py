@@ -36,8 +36,6 @@ class GetBeneficiaryIdTool(BaseTool):
         return int(partner_id) if partner_id else None
 
     async def get_beneficiary_id(self, partner_id: int, program_id: int, session: AsyncSession) -> int:
-        print("partner_id_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", partner_id)
-        print("program_id_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", program_id)
         if partner_id:
             stmt = text(
                 "SELECT id as beneficiary_id, program_id, state as beneficiary_status from g2p_program_membership where partner_id = :partner_id and program_id = :program_id"
@@ -60,13 +58,10 @@ class GetBeneficiaryIdTool(BaseTool):
     async def call_tool(
         self, request: GetBeneficiaryIdToolRequest, messages=None
     ) -> GetBeneficiaryIdToolResponse:
-        print("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", request)
         async_session_maker = async_sessionmaker(dbengine.get())
         async with async_session_maker() as session:
             partner_id = await self.get_partner_id(request.user_id, session)
-            print("partner_id_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", partner_id)
             ben = await self.get_beneficiary_id(partner_id, request.program_id, session)
-            print("ben_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", ben)
         if not ben:
             return GetBeneficiaryIdToolResponse(beneficiary_status="not_found", program_id=request.program_id)
         else:
