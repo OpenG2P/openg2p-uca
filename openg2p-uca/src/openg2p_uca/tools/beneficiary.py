@@ -13,17 +13,15 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class GetBeneficiaryIdTool(BaseTool):
+    """
+    Checks whether the user, with the given user_id,
+    exists in the program, with the program_id
+    and returns beneficiary id and status.
+    """
+
     def __init__(self, **kw):
         super().__init__(**kw)
         self._id_type_id: int = None
-
-    def get_description(self):
-        """
-        Checks whether the user, with the given user_id,
-        exists in the program, with the program_id
-        and returns beneficiary id and status.
-        """
-        return self.get_description.__doc__
 
     async def get_partner_id(self, user_id: str, session: AsyncSession) -> int | None:
         stmt = text("SELECT partner_id from g2p_reg_id where value = :value and id_type = :id_type")

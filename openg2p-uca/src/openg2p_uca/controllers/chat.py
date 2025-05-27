@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import Cookie, Depends, Response
+from fastapi import Cookie, Depends, Response, UploadFile
 from fastapi.responses import ORJSONResponse
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController
 from openg2p_fastapi_auth.dependencies import JwtBearerAuth
@@ -78,6 +78,13 @@ class ChatController(BaseController):
             methods=["GET"],
         )
 
+        self.router.add_api_route(
+            "/voice_message",
+            self.post_new_voice_message,
+            responses={200: {"model": UcaChatMessageResponse}},
+            methods=["POST"],
+        )
+
         self._main_agent: MainAgent = None
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
@@ -118,6 +125,7 @@ class ChatController(BaseController):
                 thread_id=res_thread.id,
                 thread_created_at=res_thread.created_at,
                 message=self.filter_message(res_msg.message),
+                message_id=res_msg.id,
                 message_by=res_msg.message_by,
                 message_sent_at=res_msg.sent_at,
             ).model_dump(mode="json")
@@ -215,7 +223,10 @@ class ChatController(BaseController):
         """
         res = await self.main_agent.chat_and_store_by_user(thread_id, message.message, self.get_user_id(auth))
         return UcaChatMessageResponse(
-            message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
+            message=self.filter_message(res.message),
+            message_id=res.id,
+            message_by=res.message_by,
+            sent_at=res.sent_at,
         )
 
     async def get_chat_messages(
@@ -242,12 +253,18 @@ class ChatController(BaseController):
         return UcaChatMessagesResponse(
             messages=[
                 UcaChatMessageResponse(
-                    message=self.filter_message(msg.message), message_by=msg.message_by, sent_at=msg.sent_at
+                    message=self.filter_message(msg.message),
+                    message_id=msg.id,
+                    message_by=msg.message_by,
+                    sent_at=msg.sent_at,
                 )
                 for msg in res.messages
                 if msg.message
             ]
         )
+
+    def post_new_voice_message(self, audio: UploadFile):
+        pass
 
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags

@@ -13,6 +13,10 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class BaseTool(BaseService):
+    """
+    Base Tool to be used as parent class for all Tools to be passed to LLM.
+    """
+
     def __init__(self, **kw):
         super().__init__(**kw)
         self.enabled = True
@@ -28,9 +32,9 @@ class BaseTool(BaseService):
 
     def get_description(self) -> str:
         """
-        To be extended by the child class
+        Can be extended by the child class
         """
-        return ""
+        return self.__doc__
 
     def get_tool_request_response_types(self):
         """

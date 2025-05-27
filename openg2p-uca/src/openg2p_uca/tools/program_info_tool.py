@@ -13,8 +13,7 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ProgramInfoTool(BaseTool):
-    def get_description(self):
-        return "Retrieves information about all the programs."
+    """Retrieves information about all the programs."""
 
     async def call_tool(self, request: ProgramToolRequest, messages=None) -> ProgramToolResponse:
         async_session_maker = async_sessionmaker(dbengine.get())
