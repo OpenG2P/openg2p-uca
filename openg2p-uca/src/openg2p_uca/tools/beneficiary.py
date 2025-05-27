@@ -35,7 +35,7 @@ class GetBeneficiaryIdTool(BaseTool):
     async def get_beneficiary_id(self, partner_id: int, program_id: int, session: AsyncSession) -> int:
         if partner_id:
             stmt = text(
-                "SELECT id, state as status from g2p_program_membership where partner_id = :partner_id and program_id = :program_id"
+                "SELECT id as beneficiary_id, program_id, state as beneficiary_status from g2p_program_membership where partner_id = :partner_id and program_id = :program_id"
             )
             result = await session.execute(stmt, {"partner_id": partner_id, "program_id": program_id})
             bens = [res._asdict() for res in result.all()]
@@ -60,9 +60,9 @@ class GetBeneficiaryIdTool(BaseTool):
             partner_id = await self.get_partner_id(request.user_id, session)
             ben = await self.get_beneficiary_id(partner_id, request.program_id, session)
         if not ben:
-            return GetBeneficiaryIdToolResponse(status="not_found")
+            return GetBeneficiaryIdToolResponse(beneficiary_status="not_found", program_id=request.program_id)
         else:
             ben = GetBeneficiaryIdToolResponse.model_validate(ben)
-            if ben.status == "draft":
-                ben.status = "applied"
+            if ben.beneficiary_status == "draft":
+                ben.beneficiary_status = "applied"
             return ben
