@@ -1,5 +1,6 @@
 # ruff: noqa: E402
 
+
 from .config import Settings
 
 _config: Settings = Settings.get_config()
@@ -7,11 +8,12 @@ _config: Settings = Settings.get_config()
 from openg2p_fastapi_auth.controllers.oauth_controller import OAuthController
 from openg2p_fastapi_common.ping import PingController
 from openg2p_llm_common.app import Initializer as BaseInitializer
+from openg2p_llm_common.services.agents import BaseAgentSystem
+from openg2p_llm_common.services.chat_store import ESChatStoreService
+from openg2p_llm_common.services.tools.box import ToolboxService
+from openg2p_llm_common.services.tools.change_agent import ChangeAgentTool
 
-from .agents.application import ApplicationAgent
-from .agents.grievance import GrievanceAgent
-from .agents.main_agent import MainAgent
-from .agents.program_info_agent import ProgramInfoAgent
+from .agents.main import MainAgent
 from .controllers.auth import AuthController
 from .controllers.chat import ChatController
 from .tools.beneficiary import GetBeneficiaryIdTool
@@ -27,10 +29,12 @@ class Initializer(BaseInitializer):
         AuthController().post_init()
         OAuthController().post_init()
         ChatController().post_init()
+        BaseAgentSystem()
         MainAgent()
-        ProgramInfoAgent()
-        GrievanceAgent()
-        ApplicationAgent()
+        ToolboxService()
+        ChangeAgentTool()
         ProgramInfoTool()
         GetBeneficiaryIdTool()
         CreateGrievanceTicketTool()
+        if _config.chat_store_es_enabled:
+            ESChatStoreService()

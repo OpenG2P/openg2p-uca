@@ -23,6 +23,21 @@ class GetBeneficiaryIdTool(BaseTool):
         super().__init__(**kw)
         self._id_type_id: int = None
 
+    async def call_tool(
+        self, request: GetBeneficiaryIdToolRequest, agent=None, messages=None, **kw
+    ) -> GetBeneficiaryIdToolResponse:
+        async_session_maker = async_sessionmaker(dbengine.get())
+        async with async_session_maker() as session:
+            partner_id = await self.get_partner_id(request.user_id, session)
+            ben = await self.get_beneficiary_id(partner_id, request.program_id, session)
+        if not ben:
+            return GetBeneficiaryIdToolResponse(beneficiary_status="not_found", program_id=request.program_id)
+        else:
+            ben = GetBeneficiaryIdToolResponse.model_validate(ben)
+            if ben.beneficiary_status == "draft":
+                ben.beneficiary_status = "applied"
+            return ben
+
     async def get_partner_id(self, user_id: str, session: AsyncSession) -> int | None:
         stmt = text("SELECT partner_id from g2p_reg_id where value = :value and id_type = :id_type")
         result = await session.execute(
@@ -51,18 +66,3 @@ class GetBeneficiaryIdTool(BaseTool):
             result = await session.execute(stmt, {"name": _config.user_id_id_type})
             self._id_type_id = result.scalar()  # Cache the id_type_id
         return self._id_type_id
-
-    async def call_tool(
-        self, request: GetBeneficiaryIdToolRequest, messages=None
-    ) -> GetBeneficiaryIdToolResponse:
-        async_session_maker = async_sessionmaker(dbengine.get())
-        async with async_session_maker() as session:
-            partner_id = await self.get_partner_id(request.user_id, session)
-            ben = await self.get_beneficiary_id(partner_id, request.program_id, session)
-        if not ben:
-            return GetBeneficiaryIdToolResponse(beneficiary_status="not_found", program_id=request.program_id)
-        else:
-            ben = GetBeneficiaryIdToolResponse.model_validate(ben)
-            if ben.beneficiary_status == "draft":
-                ben.beneficiary_status = "applied"
-            return ben

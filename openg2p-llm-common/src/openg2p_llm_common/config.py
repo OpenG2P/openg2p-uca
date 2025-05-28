@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     default_ollama_response_filters_sub: list[str] = [""]
     default_ollama_response_filter_flags: int = re.DOTALL
 
-    default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.txt"
+    default_system_prompt_suffix_to_store_path: str = "system_prompts/suffix_to_store.md"
 
     # Ensure this is less than Chat store's limit.
     # Example; ES has an search result limit of 10000. See index.max_result_window in ES.

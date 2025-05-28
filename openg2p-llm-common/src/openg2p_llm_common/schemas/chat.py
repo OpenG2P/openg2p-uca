@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 from .ollama import OllamaChatMessageRole
 
@@ -23,6 +23,8 @@ class GetChatThreadResponse(BaseModel):
 
 
 class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     thread_id: str
     user_id: str
@@ -30,6 +32,7 @@ class ChatMessage(BaseModel):
     message_by: OllamaChatMessageRole
     message: str
     tool_name: str | None = None
+    last_used_agent: str | None = None
 
     @field_serializer("sent_at")
     def serialize_dt(self, value: datetime):

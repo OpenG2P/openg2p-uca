@@ -10,18 +10,10 @@ from openg2p_fastapi_common.app import Initializer as BaseInitializer
 from openg2p_fastapi_common.context import component_registry
 
 from .services.agents import BaseAgent
-from .services.chat_store import ChatStoreService, ESChatStoreService
-from .services.tools.box import ToolboxService
+from .services.chat_store import ChatStoreService
 
 
 class Initializer(BaseInitializer):
-    def initialize(self, **kwargs):
-        super().initialize(**kwargs)
-
-        if _config.chat_store_es_enabled:
-            ESChatStoreService()
-        ToolboxService()
-
     def migrate_database(self, args, **kw):
         super().migrate_database(args, **kw)
         for chat_store in component_registry.get():

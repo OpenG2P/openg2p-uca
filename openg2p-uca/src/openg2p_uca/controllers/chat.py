@@ -12,9 +12,9 @@ from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.controller import BaseController
 from openg2p_llm_common.errors import ThreadIdInvalid
+from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.chat_store import ChatStoreService
 
-from ..agents.main_agent import MainAgent
 from ..config import Settings
 from ..errors import AuthMissingUserId
 from ..schemas.chat import (
@@ -85,15 +85,15 @@ class ChatController(BaseController):
             methods=["POST"],
         )
 
-        self._main_agent: MainAgent = None
+        self._agent_system: BaseAgentSystem = None
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
 
     @property
-    def main_agent(self):
-        if not self._main_agent:
-            self._main_agent = MainAgent.get_component()
-        return self._main_agent
+    def agent_system(self):
+        if not self._agent_system:
+            self._agent_system = BaseAgentSystem.get_component()
+        return self._agent_system
 
     @property
     def chat_store_service(self):
@@ -116,10 +116,10 @@ class ChatController(BaseController):
         user_profile = await self.auth_controller.get_profile(auth, online=True)
         user_id = self.get_user_id(user_profile)
 
-        res_thread = await self.main_agent.initialize_chat_thread(
+        res_thread = await self.agent_system.initialize_chat_thread(
             new_thread_id, user_id, user_profile=user_profile
         )
-        res_msg = await self.main_agent.chat_and_store_by_user(new_thread_id, None, user_id)
+        res_msg = await self.agent_system.chat_and_store_by_user(new_thread_id, None, user_id)
         response = ORJSONResponse(
             content=UcaChatThreadCreateResponse(
                 thread_id=res_thread.id,
@@ -221,7 +221,9 @@ class ChatController(BaseController):
         Posts new message, from request body, into the thread_id given in cookie.
         Returns AI's response in body.
         """
-        res = await self.main_agent.chat_and_store_by_user(thread_id, message.message, self.get_user_id(auth))
+        res = await self.agent_system.chat_and_store_by_user(
+            thread_id, message.message, self.get_user_id(auth)
+        )
         return UcaChatMessageResponse(
             message=self.filter_message(res.message),
             message_id=res.id,

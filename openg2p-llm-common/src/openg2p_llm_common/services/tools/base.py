@@ -1,12 +1,16 @@
 import logging
-from typing import get_type_hints
+from typing import TYPE_CHECKING, get_type_hints
 
 from openg2p_fastapi_common.service import BaseService
+from openg2p_fastapi_common.utils.holder import Holder
 
 from ...config import Settings
 from ...errors import ToolInvalidRequestResponse
 from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseRequest, ToolBaseResponse
+
+if TYPE_CHECKING:
+    from ..agents import BaseAgent
 
 _config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -57,7 +61,10 @@ class BaseTool(BaseService):
         return self._tool_response_model
 
     async def call_tool(
-        self, request: ToolBaseRequest, messages: list[OllamaChatMessage] | None = None
+        self,
+        request: ToolBaseRequest,
+        agent: Holder["BaseAgent"] | None = None,
+        messages: list[OllamaChatMessage] | None = None,
     ) -> ToolBaseResponse:
         """
         To be extended by the child class
