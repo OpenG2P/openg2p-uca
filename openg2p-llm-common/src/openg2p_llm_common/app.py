@@ -11,6 +11,8 @@ from openg2p_fastapi_common.context import component_registry
 
 from .services.agents import BaseAgent
 from .services.chat_store import ChatStoreService
+from .services.stt.base import BaseSTTService
+from .services.tts.base import BaseTTSService
 
 
 class Initializer(BaseInitializer):
@@ -25,7 +27,11 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.initialize()
-            if isinstance(service, BaseAgent) and service.enabled:
+            elif isinstance(service, BaseAgent) and service.enabled:
+                await service.initialize()
+            elif isinstance(service, BaseSTTService) and service.enabled:
+                await service.initialize()
+            elif isinstance(service, BaseTTSService) and service.enabled:
                 await service.initialize()
 
     async def fastapi_app_shutdown(self, app):
@@ -33,5 +39,9 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.aclose()
-            if isinstance(service, BaseAgent) and service.enabled:
+            elif isinstance(service, BaseAgent) and service.enabled:
+                await service.aclose()
+            elif isinstance(service, BaseSTTService) and service.enabled:
+                await service.aclose()
+            elif isinstance(service, BaseTTSService) and service.enabled:
                 await service.aclose()

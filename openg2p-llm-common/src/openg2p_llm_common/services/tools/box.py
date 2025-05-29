@@ -25,6 +25,14 @@ class ToolboxService(BaseService):
         self._tool_name_map: dict[str, BaseTool] = {}
         self._ollama_tools: list[dict] = []
 
+    def validate_tool_part_of_box(self, tool: BaseTool) -> bool:
+        """Can be overriden by child class based on
+        what all tools are allowed to be part of the box.
+
+        Should return True or False based on whether a tool
+        is considered part of the box or not."""
+        return isinstance(tool, BaseTool) and tool.enabled
+
     def get_tool_name_map(self):
         """
         This generates an internal map of all tools against their names
@@ -32,7 +40,7 @@ class ToolboxService(BaseService):
         if not self._tool_name_map:
             self._tool_name_map = {}
             for tool in component_registry.get():
-                if isinstance(tool, BaseTool) and tool.enabled:
+                if self.validate_tool_part_of_box(tool):
                     self._tool_name_map[tool.get_name()] = tool
         return self._tool_name_map
 

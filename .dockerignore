@@ -92,8 +92,17 @@ venv/
 .ruff.toml
 .ruff_cache
 
+# Pytest
+**/.pytest_cache
+.coverage
+
 # VS Code
+.vs/
 .vscode/
+
+# Api docs
+api-docs
 
 # K8s & Helm charts
 charts
+models
