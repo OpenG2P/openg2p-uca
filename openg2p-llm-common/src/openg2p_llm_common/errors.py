@@ -42,3 +42,13 @@ class ThreadIdInvalid(BaseLlmCommonException):
             http_status_code=400,
             **kwargs,
         )
+
+
+class STTUnsupportedAudioFormat(BaseLlmCommonException):
+    def __init__(self, code="G2P-STT-415", message="Unspported Audio Format", http_status_code=415, **kwargs):
+        super().__init__(code, message, http_status_code, **kwargs)
+
+
+class STTUnsupportedSampleRate(BaseLlmCommonException):
+    def __init__(self, code="G2P-STT-400", message="Unspported Sample rate", http_status_code=400, **kwargs):
+        super().__init__(code, message, http_status_code, **kwargs)

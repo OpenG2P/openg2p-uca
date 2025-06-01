@@ -11,9 +11,10 @@ from openg2p_fastapi_auth.dependencies import JwtBearerAuth
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.controller import BaseController
-from openg2p_llm_common.errors import ThreadIdInvalid
+from openg2p_llm_common.errors import STTUnsupportedAudioFormat, ThreadIdInvalid
 from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.chat_store import ChatStoreService
+from openg2p_llm_common.services.stt.base import BaseSTTService
 
 from ..config import Settings
 from ..errors import AuthMissingUserId
@@ -88,6 +89,7 @@ class ChatController(BaseController):
         self._agent_system: BaseAgentSystem = None
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
+        self._stt_service: BaseSTTService = None
 
     @property
     def agent_system(self):
@@ -106,6 +108,12 @@ class ChatController(BaseController):
         if not self._auth_controller:
             self._auth_controller = AuthController.get_component()
         return self._auth_controller
+
+    @property
+    def stt_service(self):
+        if not self._stt_service:
+            self._stt_service = BaseSTTService.get_component()
+        return self._stt_service
 
     async def post_new_chat_thread(self, auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())]):
         """
@@ -265,8 +273,23 @@ class ChatController(BaseController):
             ]
         )
 
-    def post_new_voice_message(self, audio: UploadFile):
-        pass
+    async def post_new_voice_message(
+        self,
+        audio: UploadFile,
+        thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+    ):
+        """
+        Posts new voice message, from request body, into the thread_id given in cookie.
+        Returns AI's response in body.
+        """
+        if not audio.content_type.startswith("audio/"):
+            raise STTUnsupportedAudioFormat()
+        audio_bytes, sample_rate, _, _ = await self.stt_service.verify_audio_format(audio.file)
+        text_msg = await self.stt_service.convert_audio_to_text(audio_bytes, sample_rate)
+        text_msg += " " + await self.stt_service.flush(sample_rate)
+        text_msg = text_msg.strip()
+        return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags

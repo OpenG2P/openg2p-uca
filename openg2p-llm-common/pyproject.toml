@@ -20,6 +20,10 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+stt-vosk = ["numpy", "vosk"]
+tts-orpheus = ["orpheus-speech"]
+
 [project.urls]
 Homepage = "https://openg2p.org"
 Documentation = "https://docs.openg2p.org/"

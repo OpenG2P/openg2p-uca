@@ -27,11 +27,11 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.initialize()
-            elif isinstance(service, BaseAgent) and service.enabled:
-                await service.initialize()
             elif isinstance(service, BaseSTTService) and service.enabled:
                 await service.initialize()
             elif isinstance(service, BaseTTSService) and service.enabled:
+                await service.initialize()
+            elif isinstance(service, BaseAgent) and service.enabled:
                 await service.initialize()
 
     async def fastapi_app_shutdown(self, app):
@@ -39,9 +39,9 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.aclose()
-            elif isinstance(service, BaseAgent) and service.enabled:
-                await service.aclose()
             elif isinstance(service, BaseSTTService) and service.enabled:
                 await service.aclose()
             elif isinstance(service, BaseTTSService) and service.enabled:
+                await service.aclose()
+            elif isinstance(service, BaseAgent) and service.enabled:
                 await service.aclose()
