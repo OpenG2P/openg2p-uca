@@ -21,7 +21,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-stt-vosk = ["numpy", "vosk"]
+stt-vosk = ["ffmpeg-python", "vosk"]
 tts-orpheus = ["orpheus-speech"]
 
 [project.urls]

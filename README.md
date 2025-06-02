@@ -41,7 +41,8 @@ This is an exploration project to build an AI based Unified Conversation Agent (
   pip install -e ./openg2p-llm-common
   pip install -e ./openg2p-uca
   ```
-- If you want calling and voice message (speech-to-text and text-to-speech aspects), run:
+- If you want calling and voice message (speech-to-text and text-to-speech aspects); install ffmpeg on your OS.
+  Then run the following to install extra dependencies:
   ```
   pip install "./openg2p-llm-common[stt-vosk,tts-orpheus]"
   pip install "./openg2p-uca[stt-vosk,tts-orpheus]"

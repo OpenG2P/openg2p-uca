@@ -51,6 +51,6 @@ class Settings(BaseSettings):
     chat_store_messages_es_index: str = "llm_messages"
     chat_store_threads_es_index: str = "llm_threads"
 
-    stt_supported_sample_rates: list[float] = [8000, 16000, 44100]
+    stt_supported_sample_rate: float = 16000
     stt_vosk_model_name: str = "vosk-model-en-us-0.22"
     stt_vosk_model_directory: str = "models"

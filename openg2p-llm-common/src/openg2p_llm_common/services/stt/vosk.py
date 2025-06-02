@@ -1,16 +1,16 @@
 import logging
-import wave
+import subprocess
 from typing import BinaryIO
 
-import numpy as np
+import ffmpeg
 import orjson
 import vosk
 
 from ...config import Settings
-from ...errors import STTUnsupportedAudioFormat, STTUnsupportedSampleRate
+from ...errors import STTUnsupportedAudioFormat
 from .base import BaseSTTService
 
-_config: Settings = Settings.get_config()
+_config: Settings = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
@@ -18,73 +18,47 @@ class VoskSTTService(BaseSTTService):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.model: vosk.Model = None
-        self.recognizers: dict[float, vosk.KaldiRecognizer] = {}
+        self.recognizer: vosk.KaldiRecognizer = None
 
     async def initialize(self):
         """VOSK initialization."""
         model_path = _config.stt_vosk_model_directory.removesuffix("/")
         self.model = vosk.Model(model_path=f"{model_path}/{_config.stt_vosk_model_name}")
-        for sr in _config.stt_supported_sample_rates:
-            self.recognizers[sr] = vosk.KaldiRecognizer(self.model, sr)
+        self.recognizer = vosk.KaldiRecognizer(self.model, _config.stt_supported_sample_rate)
 
     async def aclose(self):
         """No closing required for VOSK service."""
 
-    async def verify_audio_format(self, audio: BinaryIO) -> tuple[bytes, float, str, int]:
+    async def verify_audio_format(self, audio: BinaryIO) -> bytes:
         """Takes audio from file object, verifies format,
-        return bytes, sample_rate, format, original_channels which can be passed to convert function."""
-        try:
-            sfile = wave.open(audio, "rb")
-            aformat = "WAV"
-        except Exception as e:
-            err = STTUnsupportedAudioFormat()
-            err.message += '. Currently supported formats are ["wav"].'
-            raise err from e
-        sample_rate = sfile.getframerate()
-        if sample_rate not in self.recognizers:
-            err = STTUnsupportedSampleRate()
-            err.message += f". Currently supported sample rates are: {_config.stt_supported_sample_rates}"
-            raise err
-        channels = sfile.getnchannels()
-        frames = sfile.readframes(sfile.getnframes())
-        sampwidth = sfile.getsampwidth()
-        audio_bytes = self.merge_multiple_channels_of_wav(frames, channels, sampwidth)
-        sfile.close()
-        return audio_bytes, sample_rate, aformat, channels
+        return audio_bytes which can be directly passed to the convert function."""
+        ffmpeg_process: subprocess.Popen = (
+            ffmpeg.input("pipe:0")
+            .output(
+                "pipe:1",
+                format="s16le",
+                acodec="pcm_s16le",
+                ac="1",
+                ar=str(_config.stt_supported_sample_rate),
+            )
+            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True, overwrite_output=True)
+        )
+        out_bytes, err_bytes = ffmpeg_process.communicate(audio.read())
+        _logger.debug("FFmpeg error_out. %s", err_bytes.decode())
+        if ffmpeg_process.returncode != 0:
+            _logger.debug("FFmpeg error_out. %s", err_bytes.decode())
+            # _logger.debug("FFmpeg std_out. %s", out_bytes.decode())
+            raise STTUnsupportedAudioFormat()
+        return out_bytes
 
-    async def convert_audio_to_text(self, audio: bytes, sample_rate: float) -> str:
+    async def convert_audio_to_text(self, audio: bytes) -> str:
         """Converts audio, a file-like object, to text. Returns string."""
-        silence = self.recognizers[sample_rate].AcceptWaveform(audio)
+        silence = self.recognizer.AcceptWaveform(audio)
         if silence:
-            return orjson.loads(self.recognizers[sample_rate].Result())["text"]
+            return orjson.loads(self.recognizer.Result())["text"]
         else:
-            return orjson.loads(self.recognizers[sample_rate].PartialResult())["text"]
+            return orjson.loads(self.recognizer.PartialResult())["partial"]
 
-    async def flush(self, sample_rate: float) -> str:
+    async def flush(self) -> str:
         """Flushes any audio present in the buffers and returns leftover text."""
-        return orjson.loads(self.recognizers[sample_rate].FinalResult())["text"]
-
-    def merge_multiple_channels_of_wav(self, frames: bytes, nchannels: int, sample_width: int) -> bytes:
-        if sample_width == 1:
-            samples = np.frombuffer(frames, dtype=np.int8).astype(np.int64)
-        elif sample_width == 2:
-            samples = np.frombuffer(frames, dtype=np.int16).astype(np.int64)
-        elif sample_width == 3:
-            # 24-bit, convert to 32-bit then to 64-bit
-            samples_raw = np.frombuffer(frames, dtype=np.uint8)
-            samples = np.zeros(len(samples_raw) // 3, dtype=np.int32)
-            for i in range(len(samples)):
-                chunk = samples_raw[i * 3 : (i + 1) * 3]
-                val = int.from_bytes(
-                    chunk + (b"\x00" if chunk[2] & 0x80 == 0 else b"\xFF"), byteorder="little", signed=True
-                )
-                samples[i] = val
-            samples = samples.astype(np.int64)
-        else:
-            # elif sample_width == 4: # Assumed same as else
-            samples = np.frombuffer(frames, dtype=np.int32).astype(np.int64)
-
-        if nchannels > 1:
-            return samples.mean(axis=1).tobytes()
-        else:
-            return samples.tobytes()
+        return orjson.loads(self.recognizer.FinalResult())["text"]

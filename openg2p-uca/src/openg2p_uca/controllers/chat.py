@@ -285,9 +285,9 @@ class ChatController(BaseController):
         """
         if not audio.content_type.startswith("audio/"):
             raise STTUnsupportedAudioFormat()
-        audio_bytes, sample_rate, _, _ = await self.stt_service.verify_audio_format(audio.file)
-        text_msg = await self.stt_service.convert_audio_to_text(audio_bytes, sample_rate)
-        text_msg += " " + await self.stt_service.flush(sample_rate)
+        audio_bytes = await self.stt_service.verify_audio_format(audio.file)
+        text_msg = await self.stt_service.convert_audio_to_text(audio_bytes)
+        text_msg += " " + await self.stt_service.flush()
         text_msg = text_msg.strip()
         return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
