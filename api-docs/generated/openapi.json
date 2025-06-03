@@ -1002,6 +1002,104 @@
           }
         }
       }
+    },
+    "/chat/voice_message": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Post New Voice Message",
+        "description": "Posts new voice message, from request body, into the thread_id given in cookie.\nReturns AI's response in body.",
+        "operationId": "post_new_voice_message_chat_voice_message_post",
+        "security": [
+          {
+            "JwtBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_new_voice_message_chat_voice_message_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaChatMessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1124,6 +1222,20 @@
         "additionalProperties": true,
         "type": "object",
         "title": "BasicProfile"
+      },
+      "Body_post_new_voice_message_chat_voice_message_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_post_new_voice_message_chat_voice_message_post"
       },
       "ErrorListResponse": {
         "properties": {
@@ -1252,6 +1364,10 @@
             "type": "string",
             "title": "Message"
           },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
           "message_by": {
             "type": "string",
             "enum": [
@@ -1269,6 +1385,7 @@
         "type": "object",
         "required": [
           "message",
+          "message_id",
           "message_by",
           "sent_at"
         ],
@@ -1305,6 +1422,10 @@
             "type": "string",
             "title": "Message"
           },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
           "message_by": {
             "type": "string",
             "enum": [
@@ -1324,6 +1445,7 @@
           "thread_id",
           "thread_created_at",
           "message",
+          "message_id",
           "message_by",
           "message_sent_at"
         ],
