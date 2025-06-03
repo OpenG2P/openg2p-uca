@@ -19,9 +19,9 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class BaseAgent(BaseService):
-    def __init__(self, name: str = "", **kw):
+    def __init__(self, name: str = "", enabled=True, **kw):
         super().__init__(name=name, **kw)
-        self.enabled = True
+        self.enabled = enabled
         self.ollama_client: OllamaClientService = None
 
         self.system_prompt: str = None
@@ -131,9 +131,9 @@ class BaseAgent(BaseService):
 
 
 class BaseAgentSystem(BaseService):
-    def __init__(self, **kw):
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-
+        self.enabled = enabled
         self._system_prompt_suffix_to_store: str = None
 
         self._chat_store: ChatStoreService = None

@@ -12,7 +12,6 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 class MainAgent(BaseAgent):
     def __init__(self, name="main", **kw):
         super().__init__(name=name, **kw)
-        self.enabled = _config.main_agent_enabled
 
     async def initialize(self):
         with open(_config.main_agent_system_prompt_path) as file:

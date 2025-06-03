@@ -21,9 +21,9 @@ class BaseTool(BaseService):
     Base Tool to be used as parent class for all Tools to be passed to LLM.
     """
 
-    def __init__(self, **kw):
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-        self.enabled = True
+        self.enabled = enabled
 
         self._tool_request_model: type[ToolBaseRequest] = None
         self._tool_response_model: type[ToolBaseResponse] = None

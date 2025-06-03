@@ -50,8 +50,6 @@ class Settings(AuthSettings, BaseSettings):
     grm_ticket_new_stage_lang: str = "en_US"
     grm_ticket_new_stage_name: str = "New"
 
-    stt_vosk_enabled: bool = True
-
     user_id_key_in_auth: str = "sub"
     thread_id_cookie_name: str = "thread_id"
     thread_id_cookie_path: str = "/"

@@ -30,17 +30,18 @@ class Initializer(BaseInitializer):
         OAuthController().post_init()
         ChatController().post_init()
         if _config.chat_store_es_enabled:
-            ESChatStoreService()
+            ESChatStoreService(enabled=_config.chat_store_es_enabled)
 
         if _config.stt_vosk_enabled:
             from openg2p_llm_common.services.stt.vosk import VoskSTTService
 
-            VoskSTTService()
+            VoskSTTService(enabled=_config.stt_vosk_enabled)
 
         ChangeAgentTool()
         ProgramInfoTool()
         GetBeneficiaryIdTool()
         CreateGrievanceTicketTool()
         ToolboxService()
-        MainAgent()
+        if _config.main_agent_enabled:
+            MainAgent(enabled=_config.main_agent_enabled)
         BaseAgentSystem()

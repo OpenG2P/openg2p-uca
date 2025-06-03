@@ -22,7 +22,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 stt-vosk = ["ffmpeg-python", "vosk"]
-tts-orpheus = ["orpheus-speech"]
+tts-orpheus = ["snac", "vllm"]
 
 [project.urls]
 Homepage = "https://openg2p.org"

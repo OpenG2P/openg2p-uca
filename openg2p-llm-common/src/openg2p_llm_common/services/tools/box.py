@@ -19,9 +19,9 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ToolboxService(BaseService):
-    def __init__(self, **kw):
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-        self.enabled = True
+        self.enabled = enabled
         self._tool_name_map: dict[str, BaseTool] = {}
         self._ollama_tools: list[dict] = []
 

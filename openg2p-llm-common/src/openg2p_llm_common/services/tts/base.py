@@ -10,9 +10,9 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class BaseTTSService(BaseService):
-    def __init__(self, **kw):
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-        self.enabled = True
+        self.enabled = enabled
 
     async def initialize(self):
         """Each TTS Service impl needs to override this.
