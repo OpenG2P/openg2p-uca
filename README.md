@@ -11,7 +11,7 @@ This is an exploration project to build an AI based Unified Conversation Agent (
 
 ### Prerequisites
 
-[Ollama](https://ollama.com/download), [docker](https://docs.docker.com/engine/install/), [vosk-server](https://github.com/alphacep/vosk-server) are installed on the machine which contains GPU.
+[Ollama](https://ollama.com/download), [docker](https://docs.docker.com/engine/install/) are installed on the machine which contains GPU.
 
 - Note: Add `OLLAMA_HOST=0.0.0.0` env var in ollama startup command.
 
@@ -41,6 +41,20 @@ This is an exploration project to build an AI based Unified Conversation Agent (
   pip install -e ./openg2p-llm-common
   pip install -e ./openg2p-uca
   ```
+- If you want calling and voice message (speech-to-text and text-to-speech aspects):
+  - Install ffmpeg on your OS.
+  - Run the following to install extra dependencies:
+    ```sh
+    pip install "./openg2p-llm-common[stt-vosk,tts-orpheus]"
+    pip install "./openg2p-uca[stt-vosk,tts-orpheus]"
+    ```
+  - Make sure. pytorch is installed with cuda available.
+  - Add the following env vars to your `.env`:
+    ```sh
+    UCA_STT_VOSK_ENABLED=true
+    UCA_TTS_ORPHEUS_ENABLED=true
+    ```
+  - Download the relevant models into [models](./models) directory. TODO: elaborate on how.
 - Run
   ```sh
   . .venv/bin/activate

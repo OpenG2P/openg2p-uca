@@ -1,8 +1,9 @@
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from openg2p_fastapi_common.context import component_registry
 from openg2p_fastapi_common.service import BaseService
+from openg2p_fastapi_common.utils.holder import Holder
 
 from ...config import Settings
 from ...errors import ToolNotFound
@@ -10,16 +11,27 @@ from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseResponse
 from .base import BaseTool
 
+if TYPE_CHECKING:
+    from ..agents import BaseAgent
+
 _config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ToolboxService(BaseService):
-    def __init__(self, **kw):
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-        self.enabled = True
+        self.enabled = enabled
         self._tool_name_map: dict[str, BaseTool] = {}
         self._ollama_tools: list[dict] = []
+
+    def validate_tool_part_of_box(self, tool: BaseTool) -> bool:
+        """Can be overriden by child class based on
+        what all tools are allowed to be part of the box.
+
+        Should return True or False based on whether a tool
+        is considered part of the box or not."""
+        return isinstance(tool, BaseTool) and tool.enabled
 
     def get_tool_name_map(self):
         """
@@ -28,7 +40,7 @@ class ToolboxService(BaseService):
         if not self._tool_name_map:
             self._tool_name_map = {}
             for tool in component_registry.get():
-                if isinstance(tool, BaseTool) and tool.enabled:
+                if self.validate_tool_part_of_box(tool):
                     self._tool_name_map[tool.get_name()] = tool
         return self._tool_name_map
 
@@ -57,24 +69,36 @@ class ToolboxService(BaseService):
         }
 
     async def call_each_tool_from_ollama(
-        self, tool_call: dict[str, Any], messages: list[OllamaChatMessage] | None = None
+        self,
+        tool_call: dict[str, Any],
+        agent: Holder["BaseAgent"],
+        messages: list[OllamaChatMessage] | None = None,
+        **kw
     ) -> ToolBaseResponse:
         # TODO: Put validation on tool_call json.
         tool_name: str = (tool_call.get("function") or {}).get("name") or ""
         tool_args: dict[str, Any] = (tool_call.get("function") or {}).get("arguments") or {}
+        _logger.info("Tool invoking. Name %s", tool_name)
+        _logger.debug("Tool invoking. Request:", extra={"props": tool_args})
         try:
             tool = self.get_tool_name_map()[tool_name]
         except Exception as e:
             raise ToolNotFound() from e
-        res = await tool.call_tool(tool.get_request_model().model_validate(tool_args), messages=messages)
+        res = await tool.call_tool(
+            tool.get_request_model().model_validate(tool_args), agent=agent, messages=messages, **kw
+        )
         res.tool_name = tool_name
         return res
 
     async def call_tools_from_ollama(
-        self, tool_calls: list[dict[str, Any]], messages: list[OllamaChatMessage] | None = None
+        self,
+        tool_calls: list[dict[str, Any]],
+        agent: Holder["BaseAgent"],
+        messages: list[OllamaChatMessage] | None = None,
+        **kw
     ) -> list[ToolBaseResponse]:
         final_res = []
         for tool_call in tool_calls:
-            res = await self.call_each_tool_from_ollama(tool_call, messages=messages)
+            res = await self.call_each_tool_from_ollama(tool_call, agent, messages=messages, **kw)
             final_res.append(res)
         return final_res

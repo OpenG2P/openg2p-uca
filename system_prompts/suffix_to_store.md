@@ -1,4 +1,4 @@
-USER DETAILS:
+# USER DETAILS
 - ID: "{auth_user_id}"
 - Name: "{auth_name}"
 - Date of birth: "{auth_birthdate}"

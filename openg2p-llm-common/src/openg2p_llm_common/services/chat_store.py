@@ -15,12 +15,12 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ChatStoreService(BaseService):
-    def __init__(self, **kwargs):
+    def __init__(self, enabled=True, **kwargs):
         """
         Abstract Service. Donot instantiate directly.
         """
         super().__init__(**kwargs)
-        self.enabled: bool = True
+        self.enabled: bool = enabled
 
     async def initialize(self):
         raise NotImplementedError()
@@ -69,7 +69,6 @@ class ChatStoreService(BaseService):
 class ESChatStoreService(ChatStoreService):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.enabled = _config.chat_store_es_enabled
         self.client: httpx.AsyncClient = None
 
     async def initialize(self):

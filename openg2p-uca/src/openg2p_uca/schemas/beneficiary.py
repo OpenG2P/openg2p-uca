@@ -7,5 +7,6 @@ class GetBeneficiaryIdToolRequest(ToolBaseRequest):
 
 
 class GetBeneficiaryIdToolResponse(ToolBaseResponse):
-    id: int | None
-    status: str
+    beneficiary_id: int | None = None
+    program_id: int | None = None
+    beneficiary_status: str

@@ -10,18 +10,12 @@ from openg2p_fastapi_common.app import Initializer as BaseInitializer
 from openg2p_fastapi_common.context import component_registry
 
 from .services.agents import BaseAgent
-from .services.chat_store import ChatStoreService, ESChatStoreService
-from .services.tools.box import ToolboxService
+from .services.chat_store import ChatStoreService
+from .services.stt.base import BaseSTTService
+from .services.tts.base import BaseTTSService
 
 
 class Initializer(BaseInitializer):
-    def initialize(self, **kwargs):
-        super().initialize(**kwargs)
-
-        if _config.chat_store_es_enabled:
-            ESChatStoreService()
-        ToolboxService()
-
     def migrate_database(self, args, **kw):
         super().migrate_database(args, **kw)
         for chat_store in component_registry.get():
@@ -33,7 +27,11 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.initialize()
-            if isinstance(service, BaseAgent) and service.enabled:
+            elif isinstance(service, BaseSTTService) and service.enabled:
+                await service.initialize()
+            elif isinstance(service, BaseTTSService) and service.enabled:
+                await service.initialize()
+            elif isinstance(service, BaseAgent) and service.enabled:
                 await service.initialize()
 
     async def fastapi_app_shutdown(self, app):
@@ -41,5 +39,9 @@ class Initializer(BaseInitializer):
         for service in component_registry.get():
             if isinstance(service, ChatStoreService) and service.enabled:
                 await service.aclose()
-            if isinstance(service, BaseAgent) and service.enabled:
+            elif isinstance(service, BaseSTTService) and service.enabled:
+                await service.aclose()
+            elif isinstance(service, BaseTTSService) and service.enabled:
+                await service.aclose()
+            elif isinstance(service, BaseAgent) and service.enabled:
                 await service.aclose()

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import orjson
 from openg2p_fastapi_common.service import BaseService
+from openg2p_fastapi_common.utils.holder import Holder
 
 from ..config import Settings
 from ..errors import ThreadIdInvalid
@@ -18,22 +19,14 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class BaseAgent(BaseService):
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self.enabled = True
+    def __init__(self, name: str = "", enabled=True, **kw):
+        super().__init__(name=name, **kw)
+        self.enabled = enabled
         self.ollama_client: OllamaClientService = None
 
         self.system_prompt: str = None
-        self.system_prompt_suffix_to_store: str = None
 
-        self._chat_store: ChatStoreService = None
         self._tool_box: ToolboxService = None
-
-    @property
-    def chat_store_service(self):
-        if not self._chat_store:
-            self._chat_store = ChatStoreService.get_component()
-        return self._chat_store
 
     @property
     def tool_box(self):
@@ -52,6 +45,138 @@ class BaseAgent(BaseService):
     async def aclose(self):
         await self.ollama_client.unload_model()
         await self.ollama_client.aclose()
+
+    async def chat(
+        self,
+        messages: list[OllamaChatMessage],
+        message_sent_at: datetime | None = None,
+        system_prompt_params: dict | None = None,
+        **kw,
+    ) -> list[OllamaChatResponse | OllamaChatMessage]:
+        """
+        Chat API - Agent Level. Given list of messages, this agent will communicate with Ollama according to its function.
+        """
+        pre_render_system_msg = messages[0].content
+        self.render_system_prompt(
+            messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
+        )
+
+        ollama_res = [
+            await self.ollama_client.chat(
+                OllamaChatRequest(messages=messages, stream=False, tools=self.tool_box.get_ollama_tools())
+            )
+        ]
+        ollama_res[0].message.agent_name = self.name
+        if ollama_res[0].message.content:
+            messages.append(ollama_res[0].message)
+        messages[0].content = pre_render_system_msg
+        await self.handle_tool_calls(
+            messages,
+            ollama_res,
+            message_sent_at=message_sent_at,
+            system_prompt_params=system_prompt_params,
+            **kw,
+        )
+        return ollama_res
+
+    async def handle_tool_calls(
+        self,
+        messages: list[OllamaChatMessage],
+        responses: list[OllamaChatResponse | OllamaChatMessage],
+        message_sent_at: datetime | None = None,
+        system_prompt_params: dict | None = None,
+        **kw,
+    ):
+        """
+        Recursive function that handles the Ollama tool_calls requests, sends the tool response to agent.
+        Receives tools calls requests again from ollama and repeats the process until no tool_calls requested by ollama.
+        """
+        if not (
+            len(responses) >= 1
+            and isinstance(responses[-1], OllamaChatResponse)
+            and responses[-1].message.tool_calls
+        ):
+            return
+        self_h = Holder[BaseAgent](self)
+        tool_res = await self.tool_box.call_tools_from_ollama(
+            responses[-1].message.tool_calls, self_h, messages=messages, **kw
+        )
+        new_agent = self_h.get()
+        for msg in tool_res:
+            tool_msg = orjson.dumps(msg.model_dump(mode="json")).decode()
+            tool_msg = OllamaChatMessage(
+                role="tool", name=msg.tool_name, content=tool_msg, agent_name=new_agent.name
+            )
+            messages.append(tool_msg)
+            responses.append(tool_msg)
+        responses += await new_agent.chat(
+            messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
+        )
+
+    def render_system_prompt(
+        self,
+        full_messages: list[OllamaChatMessage],
+        message_sent_at: datetime | None = None,
+        system_prompt_params: dict | None = None,
+        **kw,
+    ):
+        # Render System Prompt
+        # TODO: Check if first message is system role.
+        system_prompt_params = system_prompt_params or {}
+        system_prompt_params["stored_suffix"] = full_messages[0].content
+        if message_sent_at:
+            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
+            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
+        full_messages[0].content = self.system_prompt.format(**system_prompt_params)
+
+
+class BaseAgentSystem(BaseService):
+    def __init__(self, enabled=True, **kw):
+        super().__init__(**kw)
+        self.enabled = enabled
+        self._system_prompt_suffix_to_store: str = None
+
+        self._chat_store: ChatStoreService = None
+        self._agent_name_map: dict[str, BaseAgent] = {}
+
+    @property
+    def chat_store_service(self):
+        if not self._chat_store:
+            self._chat_store = ChatStoreService.get_component()
+        return self._chat_store
+
+    def get_agent(self, agent_name: str) -> BaseAgent | None:
+        """Returns agent with the given name. agent_name parameter cant be null or empty."""
+        if agent_name not in self._agent_name_map:
+            agent = BaseAgent.get_component(name=agent_name)
+            if agent and agent.enabled:
+                self._agent_name_map[agent_name] = agent
+        return self._agent_name_map.get(agent_name)
+
+    def get_default_agent(self) -> BaseAgent:
+        """To be overriden by child class based on impl.
+        By default, returns the first available agent.
+        """
+        return BaseAgent.get_component()
+
+    def get_agent_or_default(self, agent_name: str | None = None) -> BaseAgent:
+        """Returns agent with the given name if found, else returns default agent"""
+        agent = None
+        if agent_name:
+            agent = self.get_agent(agent_name)
+        return agent or self.get_default_agent()
+
+    def get_agent_name_from_messages(self, messages: list[OllamaChatMessage | OllamaChatResponse]) -> str:
+        last_msg = messages[-1]
+        if isinstance(last_msg, OllamaChatResponse):
+            last_msg = last_msg.message
+        return last_msg.agent_name
+
+    def get_system_prompt_suffix_to_store(self):
+        if not self._system_prompt_suffix_to_store:
+            with open(_config.default_system_prompt_suffix_to_store_path) as file:
+                self._system_prompt_suffix_to_store = file.read()
+        return self._system_prompt_suffix_to_store
 
     async def initialize_chat_thread(
         self,
@@ -80,7 +205,7 @@ class BaseAgent(BaseService):
                 user_id=user_id,
                 sent_at=initialized_at,
                 message_by="system",
-                message=self.system_prompt_suffix_to_store.format(**system_prompt_params),
+                message=self.get_system_prompt_suffix_to_store().format(**system_prompt_params),
             )
         )
         return thread
@@ -92,44 +217,24 @@ class BaseAgent(BaseService):
         user_id: str | None = None,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
-        past_messages: list[OllamaChatMessage] | None = None,
+        **kw,
     ) -> list[OllamaChatResponse | OllamaChatMessage]:
         """
-        Chat API. Gets past messages from the thread and sends new message to Ollama.
+        Chat API - System Level. Gets past messages from the thread and sends new message to agent.
         """
-        if past_messages is None:
-            full_messages = await self.chat_store_service.get_messages(
-                thread_id=thread_id, user_id=user_id, limit=-1, sort="asc"
-            )
-            full_messages = [
-                OllamaChatMessage(role=msg.message_by, content=msg.message) for msg in full_messages.messages
-            ]
-        else:
-            full_messages = past_messages
-
+        full_messages = await self.get_past_messages(thread_id, user_id=user_id, **kw)
         if not full_messages:
             raise ThreadIdInvalid()
 
         # TODO: implement limit on user chat messages according to `config.chat_store_messages_limit`.
 
+        agent = self.get_agent_or_default(full_messages[-1].agent_name)
         if message:
-            full_messages.append(OllamaChatMessage(role="user", content=message))
+            full_messages.append(OllamaChatMessage(role="user", content=message, agent_name=agent.name))
 
-        await self.render_system_prompt(
-            full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params
+        return await agent.chat(
+            full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
         )
-
-        ollama_res = [
-            await self.ollama_client.chat(
-                OllamaChatRequest(
-                    messages=full_messages, stream=False, tools=self.tool_box.get_ollama_tools()
-                )
-            )
-        ]
-        if ollama_res[0].message.content:
-            full_messages.append(ollama_res[0].message)
-        await self.handle_tool_calls(full_messages, ollama_res)
-        return ollama_res
 
     async def chat_and_store_by_user(
         self,
@@ -138,7 +243,6 @@ class BaseAgent(BaseService):
         user_id: str,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
-        past_messages: list[OllamaChatMessage] | None = None,
         **kw,
     ) -> ChatMessage:
         """
@@ -154,7 +258,6 @@ class BaseAgent(BaseService):
             user_id=user_id,
             message_sent_at=message_sent_at,
             system_prompt_params=system_prompt_params,
-            past_messages=past_messages,
             **kw,
         )
 
@@ -167,6 +270,7 @@ class BaseAgent(BaseService):
                 sent_at=message_sent_at,
                 message_by="user",
                 message=message,
+                last_used_agent=self.get_agent_name_from_messages(res),
             )
             await self.chat_store_service.put_message(user_chat_message)
         for msg in res:
@@ -180,6 +284,7 @@ class BaseAgent(BaseService):
                     message_by=msg.message.role,
                     message=msg.message.content,
                     tool_name=msg.message.name,
+                    last_used_agent=msg.message.agent_name,
                 )
                 if msg.message.content:
                     await self.chat_store_service.put_message(chat_msg)
@@ -193,6 +298,7 @@ class BaseAgent(BaseService):
                     message_by=msg.role,
                     message=msg.content,
                     tool_name=msg.name,
+                    last_used_agent=msg.agent_name,
                 )
                 if msg.content:
                     await self.chat_store_service.put_message(chat_msg)
@@ -200,44 +306,15 @@ class BaseAgent(BaseService):
         # Returns the last chat message to User. TODO: Check last message is LLM Response.
         return chat_msg
 
-    async def handle_tool_calls(
-        self, messages: list[OllamaChatMessage], responses: list[OllamaChatResponse | OllamaChatMessage]
-    ):
-        """
-        Recursive function that handles the Ollama tool_calls requests, sends the tool response to ollama.
-        Receives tools calls requests again from ollama and repeats the process until no tool_calls requested by ollama.
-        """
-        if not (
-            len(responses) >= 1
-            and isinstance(responses[-1], OllamaChatResponse)
-            and responses[-1].message.tool_calls
-        ):
-            return
-        tools = self.tool_box.get_ollama_tools()
-        tool_res = await self.tool_box.call_tools_from_ollama(
-            responses[-1].message.tool_calls, messages=messages
+    async def get_past_messages(
+        self, thread_id: str | None, user_id: str | None = None, **kw
+    ) -> list[OllamaChatMessage]:
+        full_messages = await self.chat_store_service.get_messages(
+            thread_id=thread_id, user_id=user_id, limit=-1, sort="asc", **kw
         )
-        for msg in tool_res:
-            tool_msg = orjson.dumps(msg.model_dump(mode="json")).decode()
-            tool_msg = OllamaChatMessage(role="tool", name=msg.tool_name, content=tool_msg)
-            messages.append(tool_msg)
-            responses.append(tool_msg)
-        responses.append(
-            await self.ollama_client.chat(OllamaChatRequest(messages=messages, stream=False, tools=tools))
-        )
-        await self.handle_tool_calls(messages, responses)
-
-    async def render_system_prompt(
-        self,
-        full_messages: list[OllamaChatMessage],
-        message_sent_at: datetime | None = None,
-        system_prompt_params: dict | None = None,
-    ):
-        # Render System Prompt
-        # TODO: Check if first message is system role.
-        system_prompt_params = system_prompt_params or {}
-        system_prompt_params["stored_suffix"] = full_messages[0].content
-        if message_sent_at:
-            system_prompt_params["current_date"] = message_sent_at.strftime("%Y-%m-%d")
-            system_prompt_params["current_time"] = message_sent_at.strftime("%I: %M %p UTC")
-        full_messages[0].content = self.system_prompt.format(**system_prompt_params)
+        return [
+            OllamaChatMessage(
+                role=msg.message_by, content=msg.message, name=msg.tool_name, agent_name=msg.last_used_agent
+            )
+            for msg in full_messages.messages
+        ]

@@ -15,6 +15,7 @@ class UcaChatMessageRequest(BaseModel):
 
 class UcaChatMessageResponse(BaseModel):
     message: str
+    message_id: str
     message_by: UcaChatMessageRole
     sent_at: datetime
 
@@ -31,6 +32,7 @@ class UcaChatThreadCreateResponse(BaseModel):
     thread_id: str
     thread_created_at: datetime
     message: str
+    message_id: str
     message_by: UcaChatMessageRole
     message_sent_at: datetime
 

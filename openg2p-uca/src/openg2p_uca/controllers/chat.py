@@ -4,17 +4,18 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import Cookie, Depends, Response
+from fastapi import Cookie, Depends, Response, UploadFile
 from fastapi.responses import ORJSONResponse
 from openg2p_fastapi_auth.controllers.auth_controller import AuthController
 from openg2p_fastapi_auth.dependencies import JwtBearerAuth
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.controller import BaseController
-from openg2p_llm_common.errors import ThreadIdInvalid
+from openg2p_llm_common.errors import STTUnsupportedAudioFormat, ThreadIdInvalid
+from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.chat_store import ChatStoreService
+from openg2p_llm_common.services.stt.base import BaseSTTService
 
-from ..agents.main_agent import MainAgent
 from ..config import Settings
 from ..errors import AuthMissingUserId
 from ..schemas.chat import (
@@ -78,15 +79,23 @@ class ChatController(BaseController):
             methods=["GET"],
         )
 
-        self._main_agent: MainAgent = None
+        self.router.add_api_route(
+            "/voice_message",
+            self.post_new_voice_message,
+            responses={200: {"model": UcaChatMessageResponse}},
+            methods=["POST"],
+        )
+
+        self._agent_system: BaseAgentSystem = None
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
+        self._stt_service: BaseSTTService = None
 
     @property
-    def main_agent(self):
-        if not self._main_agent:
-            self._main_agent = MainAgent.get_component()
-        return self._main_agent
+    def agent_system(self):
+        if not self._agent_system:
+            self._agent_system = BaseAgentSystem.get_component()
+        return self._agent_system
 
     @property
     def chat_store_service(self):
@@ -100,6 +109,12 @@ class ChatController(BaseController):
             self._auth_controller = AuthController.get_component()
         return self._auth_controller
 
+    @property
+    def stt_service(self):
+        if not self._stt_service:
+            self._stt_service = BaseSTTService.get_component()
+        return self._stt_service
+
     async def post_new_chat_thread(self, auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())]):
         """
         Initiate new chat threads. Returns new thread_id in cookie
@@ -109,15 +124,16 @@ class ChatController(BaseController):
         user_profile = await self.auth_controller.get_profile(auth, online=True)
         user_id = self.get_user_id(user_profile)
 
-        res_thread = await self.main_agent.initialize_chat_thread(
+        res_thread = await self.agent_system.initialize_chat_thread(
             new_thread_id, user_id, user_profile=user_profile
         )
-        res_msg = await self.main_agent.chat_and_store_by_user(new_thread_id, None, user_id)
+        res_msg = await self.agent_system.chat_and_store_by_user(new_thread_id, None, user_id)
         response = ORJSONResponse(
             content=UcaChatThreadCreateResponse(
                 thread_id=res_thread.id,
                 thread_created_at=res_thread.created_at,
                 message=self.filter_message(res_msg.message),
+                message_id=res_msg.id,
                 message_by=res_msg.message_by,
                 message_sent_at=res_msg.sent_at,
             ).model_dump(mode="json")
@@ -213,9 +229,14 @@ class ChatController(BaseController):
         Posts new message, from request body, into the thread_id given in cookie.
         Returns AI's response in body.
         """
-        res = await self.main_agent.chat_and_store_by_user(thread_id, message.message, self.get_user_id(auth))
+        res = await self.agent_system.chat_and_store_by_user(
+            thread_id, message.message, self.get_user_id(auth)
+        )
         return UcaChatMessageResponse(
-            message=self.filter_message(res.message), message_by=res.message_by, sent_at=res.sent_at
+            message=self.filter_message(res.message),
+            message_id=res.id,
+            message_by=res.message_by,
+            sent_at=res.sent_at,
         )
 
     async def get_chat_messages(
@@ -242,12 +263,33 @@ class ChatController(BaseController):
         return UcaChatMessagesResponse(
             messages=[
                 UcaChatMessageResponse(
-                    message=self.filter_message(msg.message), message_by=msg.message_by, sent_at=msg.sent_at
+                    message=self.filter_message(msg.message),
+                    message_id=msg.id,
+                    message_by=msg.message_by,
+                    sent_at=msg.sent_at,
                 )
                 for msg in res.messages
                 if msg.message
             ]
         )
+
+    async def post_new_voice_message(
+        self,
+        audio: UploadFile,
+        thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+    ):
+        """
+        Posts new voice message, from request body, into the thread_id given in cookie.
+        Returns AI's response in body.
+        """
+        if not audio.content_type.startswith("audio/"):
+            raise STTUnsupportedAudioFormat()
+        audio_bytes = await self.stt_service.verify_audio_format(audio.file)
+        text_msg = await self.stt_service.convert_audio_to_text(audio_bytes)
+        text_msg += " " + await self.stt_service.flush()
+        text_msg = text_msg.strip()
+        return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags

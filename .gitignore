@@ -81,3 +81,6 @@ docs/_build/
 .env
 .env.sr
 .env.pbms
+
+models/*
+!models/README.md

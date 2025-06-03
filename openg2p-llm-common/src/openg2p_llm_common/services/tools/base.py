@@ -1,21 +1,29 @@
 import logging
-from typing import get_type_hints
+from typing import TYPE_CHECKING, get_type_hints
 
 from openg2p_fastapi_common.service import BaseService
+from openg2p_fastapi_common.utils.holder import Holder
 
 from ...config import Settings
 from ...errors import ToolInvalidRequestResponse
 from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseRequest, ToolBaseResponse
 
+if TYPE_CHECKING:
+    from ..agents import BaseAgent
+
 _config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class BaseTool(BaseService):
-    def __init__(self, **kw):
+    """
+    Base Tool to be used as parent class for all Tools to be passed to LLM.
+    """
+
+    def __init__(self, enabled=True, **kw):
         super().__init__(**kw)
-        self.enabled = True
+        self.enabled = enabled
 
         self._tool_request_model: type[ToolBaseRequest] = None
         self._tool_response_model: type[ToolBaseResponse] = None
@@ -28,9 +36,9 @@ class BaseTool(BaseService):
 
     def get_description(self) -> str:
         """
-        To be extended by the child class
+        Can be extended by the child class
         """
-        return ""
+        return self.__doc__
 
     def get_tool_request_response_types(self):
         """
@@ -53,7 +61,10 @@ class BaseTool(BaseService):
         return self._tool_response_model
 
     async def call_tool(
-        self, request: ToolBaseRequest, messages: list[OllamaChatMessage] | None = None
+        self,
+        request: ToolBaseRequest,
+        agent: Holder["BaseAgent"] | None = None,
+        messages: list[OllamaChatMessage] | None = None,
     ) -> ToolBaseResponse:
         """
         To be extended by the child class

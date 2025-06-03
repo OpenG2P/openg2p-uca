@@ -16,6 +16,7 @@ class OllamaChatMessage(BaseModel):
     content: str
     name: str | None = None  # tool name to be passed while sending tool response back to ollama
     tool_calls: list[dict] | None = None  # Only found in ollama response
+    agent_name: str | None = None  # Not an Ollama field. Added here for convenience. TODO remove this.
 
 
 class OllamaChatRequest(BaseModel):
