@@ -37,6 +37,11 @@ class Initializer(BaseInitializer):
 
             VoskSTTService(enabled=_config.stt_vosk_enabled)
 
+        if _config.tts_parler_enabled:
+            from openg2p_llm_common.services.tts.parler import ParlerTTSService
+
+            ParlerTTSService(enabled=_config.tts_parler_enabled)
+
         ChangeAgentTool()
         ProgramInfoTool()
         GetBeneficiaryIdTool()

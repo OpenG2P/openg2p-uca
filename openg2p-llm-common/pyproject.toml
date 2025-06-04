@@ -22,7 +22,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 stt-vosk = ["ffmpeg-python", "vosk"]
-tts-orpheus = ["snac", "vllm"]
+tts-parler = ["transformers", "parler-tts @ git+https://github.com/huggingface/parler-tts.git"]
 
 [project.urls]
 Homepage = "https://openg2p.org"
@@ -32,3 +32,6 @@ Source = "https://github.com/OpenG2P/openg2p-uca"
 
 [tool.hatch.version]
 path = "src/openg2p_llm_common/__init__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true

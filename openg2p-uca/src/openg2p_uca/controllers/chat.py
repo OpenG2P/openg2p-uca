@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -11,10 +12,11 @@ from openg2p_fastapi_auth.dependencies import JwtBearerAuth
 from openg2p_fastapi_auth.models.credentials import AuthCredentials
 from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.controller import BaseController
-from openg2p_llm_common.errors import STTUnsupportedAudioFormat, ThreadIdInvalid
+from openg2p_llm_common.errors import MessageIdInvalid, STTUnsupportedAudioFormat, ThreadIdInvalid
 from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.chat_store import ChatStoreService
 from openg2p_llm_common.services.stt.base import BaseSTTService
+from openg2p_llm_common.services.tts.base import BaseTTSService
 
 from ..config import Settings
 from ..errors import AuthMissingUserId
@@ -22,6 +24,7 @@ from ..schemas.chat import (
     UcaChatMessageRequest,
     UcaChatMessageResponse,
     UcaChatMessagesResponse,
+    UcaChatSpeakMessageRequest,
     UcaChatThreadCreateResponse,
     UcaChatThreadRequest,
     UcaChatThreadResponse,
@@ -86,10 +89,19 @@ class ChatController(BaseController):
             methods=["POST"],
         )
 
+        self.router.add_api_route(
+            "/speak_message",
+            self.post_speak_message,
+            response_class=Response,
+            responses={200: {"content": {"audio/wav": {}}}},
+            methods=["POST"],
+        )
+
         self._agent_system: BaseAgentSystem = None
         self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
         self._stt_service: BaseSTTService = None
+        self._tts_service: BaseTTSService = None
 
     @property
     def agent_system(self):
@@ -114,6 +126,12 @@ class ChatController(BaseController):
         if not self._stt_service:
             self._stt_service = BaseSTTService.get_component()
         return self._stt_service
+
+    @property
+    def tts_service(self):
+        if not self._tts_service:
+            self._tts_service = BaseTTSService.get_component()
+        return self._tts_service
 
     async def post_new_chat_thread(self, auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())]):
         """
@@ -291,6 +309,23 @@ class ChatController(BaseController):
         text_msg = text_msg.strip()
         return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
+    async def post_speak_message(
+        self,
+        request: UcaChatSpeakMessageRequest,
+        thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
+        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+    ):
+        user_id = self.get_user_id(auth)
+        message = await self.chat_store_service.get_messages(
+            user_id=user_id, message_id=request.message_id, thread_id=thread_id
+        )
+        if len(message.messages) < 1:
+            raise MessageIdInvalid()
+
+        audio_file = io.BytesIO()
+        await self.tts_service.convert_text_to_audio(message.messages[0].message, audio_file)
+        return Response(content=audio_file.getvalue(), media_type="audio/wav")
+
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags
         regexs = _config.api_message_response_filters_regex
@@ -303,6 +338,8 @@ class ChatController(BaseController):
         return message
 
     def get_user_id(self, auth: AuthCredentials | BasicProfile):
+        if not auth and _config.auth_dummy_user_data:
+            return _config.auth_dummy_user_data[_config.user_id_key_in_auth]
         try:
             return getattr(auth, _config.user_id_key_in_auth)
         except Exception as e:

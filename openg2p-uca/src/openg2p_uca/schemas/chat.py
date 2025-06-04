@@ -28,6 +28,10 @@ class UcaChatMessagesResponse(BaseModel):
     messages: list[UcaChatMessageResponse]
 
 
+class UcaChatSpeakMessageRequest(BaseModel):
+    message_id: str
+
+
 class UcaChatThreadCreateResponse(BaseModel):
     thread_id: str
     thread_created_at: datetime
