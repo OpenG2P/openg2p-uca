@@ -25,7 +25,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 stt-vosk = ["openg2p-llm-common[stt-vosk]"]
-tts-orpheus = ["openg2p-llm-common[tts-orpheus]"]
+tts-parler = ["openg2p-llm-common[tts-parler]"]
 
 [project.urls]
 Homepage = "https://openg2p.org"

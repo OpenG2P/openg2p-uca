@@ -44,6 +44,16 @@ class ThreadIdInvalid(BaseLlmCommonException):
         )
 
 
+class MessageIdInvalid(BaseLlmCommonException):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "G2P-LLM-405",
+            "Message id not found or invalid.",
+            http_status_code=400,
+            **kwargs,
+        )
+
+
 class STTUnsupportedAudioFormat(BaseLlmCommonException):
     def __init__(self, code="G2P-STT-415", message="Unspported Audio Format", http_status_code=415, **kwargs):
         super().__init__(code, message, http_status_code, **kwargs)

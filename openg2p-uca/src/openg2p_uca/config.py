@@ -24,13 +24,14 @@ class Settings(AuthSettings, BaseSettings):
     auth_api_post_new_chat_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_post_new_voice_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_get_chat_messages: ApiAuthSettings = ApiAuthSettings(enabled=True)
+    auth_dummy_user_data: dict = {}
 
     chat_store_messages_es_index: str = "uca_messages"
     chat_store_threads_es_index: str = "uca_threads"
 
     user_id_id_type: str = "NATIONAL ID TOKEN"
 
-    ## Program Info Agent Config
+    ## Main Agent Config
     main_agent_enabled: bool = True
     main_agent_ollama_base_url: str = ""
     main_agent_ollama_model: str = ""
@@ -56,6 +57,9 @@ class Settings(AuthSettings, BaseSettings):
     thread_id_cookie_secure: bool = True
     thread_id_cookie_httponly: bool = True
     thread_id_cookie_max_age: int | None = 3600 * 2
+
+    stt_vosk_enabled: bool = False
+    tts_parler_enabled: bool = False
 
     api_message_response_filters_regex: list[str] | None = None
     api_message_response_filters_sub: list[str] | None = None
