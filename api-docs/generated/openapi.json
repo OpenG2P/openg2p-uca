@@ -79,7 +79,6 @@
           "auth"
         ],
         "summary": "Get Profile",
-        "description": "Get Profile Data of the authenticated user/entity.\nThis can also be used to check whether or not the Authentication is present and valid.\n- Authentication required.\n- If online is true, the server will try to userinfo from original Authorization Server.\n  Else it will return the information present in ID Token and Access token.",
         "operationId": "get_profile_auth_profile_get",
         "security": [
           {
@@ -1100,6 +1099,99 @@
           }
         }
       }
+    },
+    "/chat/speak_message": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Post Speak Message",
+        "operationId": "post_speak_message_chat_speak_message_post",
+        "security": [
+          {
+            "JwtBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "thread_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaChatSpeakMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "audio/wav": {}
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1406,6 +1498,19 @@
           "messages"
         ],
         "title": "UcaChatMessagesResponse"
+      },
+      "UcaChatSpeakMessageRequest": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "title": "UcaChatSpeakMessageRequest"
       },
       "UcaChatThreadCreateResponse": {
         "properties": {
