@@ -26,7 +26,6 @@ class GetBeneficiaryIdTool(BaseTool):
     ) -> GetBeneficiaryIdToolResponse:
         async_session_maker = async_sessionmaker(dbengine.get())
         async with async_session_maker() as session:
-
             partner_id = await self.get_partner_id(request.user_id, session)
             ben = await self.get_beneficiary_id(partner_id, request.program_id, session)
         if not ben:

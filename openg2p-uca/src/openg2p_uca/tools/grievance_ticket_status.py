@@ -19,7 +19,7 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 class GetGrievanceTicketStatusTool(BaseTool):
     """
     Retrieves the status of grievance tickets for a specific beneficiary and program.
-    Call the GetBeneficiaryIdTool to get the beneficiary ID. 
+    Call the GetBeneficiaryIdTool to get the beneficiary ID.
     Returns ticket details including status, resolution message, and resolution time.
     """
 
@@ -35,19 +35,19 @@ class GetGrievanceTicketStatusTool(BaseTool):
             try:
                 stmt = text(
                     """
-                    SELECT 
+                    SELECT
                         number as ticket_number,
                         stage_id,
                         resolution_message,
                         resolution_time
                     FROM support_ticket
-                    WHERE beneficiary_id = :beneficiary_id 
+                    WHERE beneficiary_id = :beneficiary_id
                     AND program_id = :program_id
                     AND active = true
                     ORDER BY create_date DESC
                     """
                 )
-                
+
                 result = await session.execute(
                     stmt,
                     {
@@ -55,19 +55,19 @@ class GetGrievanceTicketStatusTool(BaseTool):
                         "program_id": request.program_id,
                     },
                 )
-                
+
                 tickets_data = result.all()
-                
+
                 if not tickets_data:
                     return GetGrievanceTicketStatusToolResponse(
                         tickets=[],
                         status_check_message="No grievance tickets found for this beneficiary and program.",
                     )
-                
+
                 tickets = []
                 for ticket_row in tickets_data:
                     stage_name = await self.get_stage_name(ticket_row.stage_id, session)
-                    
+
                     ticket_info = TicketInfo(
                         ticket_number=ticket_row.ticket_number,
                         stage_name=stage_name,
@@ -75,14 +75,14 @@ class GetGrievanceTicketStatusTool(BaseTool):
                         resolution_time=ticket_row.resolution_time,
                     )
                     tickets.append(ticket_info)
-                
+
                 status_message = f"Found {len(tickets)} grievance ticket(s) for this beneficiary and program."
-                
+
                 return GetGrievanceTicketStatusToolResponse(
                     tickets=tickets,
                     status_check_message=status_message,
                 )
-                
+
             except Exception:
                 _logger.exception("Failed to retrieve grievance ticket status")
                 return GetGrievanceTicketStatusToolResponse(

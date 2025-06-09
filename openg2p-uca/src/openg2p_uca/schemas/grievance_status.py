@@ -1,6 +1,7 @@
+from datetime import datetime
+
 from openg2p_llm_common.schemas.tools import ToolBaseRequest, ToolBaseResponse
 from pydantic import BaseModel
-from datetime import datetime
 
 
 class TicketInfo(BaseModel):
