@@ -62,3 +62,4 @@ class Settings(BaseSettings):
         "Her voice is clear, with slight dynamic changes, and the recording is of excellent quality."
         # "Do not stop after exclamation."
     )
+    tts_parler_description_tokenizer: bool = True

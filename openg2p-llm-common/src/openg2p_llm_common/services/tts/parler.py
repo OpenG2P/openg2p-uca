@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 import torch
 from parler_tts import ParlerTTSForConditionalGeneration
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from ...config import Settings
 from .base import BaseTTSResponse, BaseTTSService
@@ -26,8 +26,7 @@ class ParlerTTSService(BaseTTSService):
         super().__init__(**kw)
         self.device: str = None
         self.model: ParlerTTSForConditionalGeneration = None
-        self.tokenizer: AutoTokenizer = None
-        self.description_tokenizer: AutoTokenizer = None
+        self.tokenizer: PreTrainedTokenizerBase = None
         self.description_input_ids: torch.Tensor = None
 
     async def initialize(self):
@@ -42,10 +41,13 @@ class ParlerTTSService(BaseTTSService):
         self.tokenizer = AutoTokenizer.from_pretrained(model_path)
         _logger.info("ParlerTTS Initialization - tokenizer initialized")
 
-        self.description_tokenizer = AutoTokenizer.from_pretrained(model_path)
-        self.description_input_ids = self.description_tokenizer(
-            _config.tts_parler_voice_description, return_tensors="pt"
-        ).to(self.device)
+        vd = _config.tts_parler_voice_description
+        if _config.tts_parler_description_tokenizer:
+            model_name_or_path = self.model.config.text_encoder._name_or_path
+            description_tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+            self.description_input_ids = description_tokenizer(vd, return_tensors="pt").to(self.device)
+        else:
+            self.description_input_ids = self.tokenizer(vd, return_tensors="pt").to(self.device)
         _logger.info("ParlerTTS Initialization - voice description initialized")
 
     async def aclose(self):
