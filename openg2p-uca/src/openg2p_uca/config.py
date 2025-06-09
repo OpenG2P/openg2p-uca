@@ -24,6 +24,7 @@ class Settings(AuthSettings, BaseSettings):
     auth_api_post_new_chat_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_post_new_voice_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_get_chat_messages: ApiAuthSettings = ApiAuthSettings(enabled=True)
+    auth_api_post_speak_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_dummy_user_data: dict = {}
 
     chat_store_messages_es_index: str = "uca_messages"
@@ -44,6 +45,10 @@ class Settings(AuthSettings, BaseSettings):
     main_agent_ollama_response_filter_flags: int | None = None
 
     main_agent_system_prompt_path: str = "system_prompts/main_agent.md"
+
+    default_system_prompt_suffix_for_call_path: str = "system_prompts/suffix_to_store_for_call.md"
+    call_standby_message_path: str = "system_prompts/call_standby_message.md"
+    call_standby_message_timer: int = 2
 
     grm_ticket_number_prefix: str = "UCA"
     grm_ticket_number_padding: int = 5
