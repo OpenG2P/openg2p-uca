@@ -20,6 +20,7 @@ from .controllers.call import CallController
 from .controllers.chat import ChatController
 from .tools.beneficiary import GetBeneficiaryIdTool
 from .tools.grievance_ticket import CreateGrievanceTicketTool
+from .tools.grievance_ticket_status import GetGrievanceTicketStatusTool
 from .tools.program_info_tool import ProgramInfoTool
 
 
@@ -49,6 +50,7 @@ class Initializer(BaseInitializer):
         ProgramInfoTool()
         GetBeneficiaryIdTool()
         CreateGrievanceTicketTool()
+        GetGrievanceTicketStatusTool()
         ToolboxService()
         if _config.main_agent_enabled:
             MainAgent(enabled=_config.main_agent_enabled)
