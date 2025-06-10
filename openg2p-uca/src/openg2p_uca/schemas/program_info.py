@@ -3,9 +3,9 @@ from pydantic import BaseModel
 
 
 class ProgramInfo(BaseModel):
-    id: int
-    name: str
-    description: str | None
+    program_id: int
+    program_name: str
+    program_description: str | None
 
 
 class ProgramToolRequest(ToolBaseRequest):

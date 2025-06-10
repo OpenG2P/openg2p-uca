@@ -143,7 +143,7 @@ class ChatController(BaseController):
         user_id = self.get_user_id(user_profile)
 
         res_thread = await self.agent_system.initialize_chat_thread(
-            new_thread_id, user_id, user_profile=user_profile
+            new_thread_id, user_id, user_profile=user_profile.model_dump(mode="json")
         )
         res_msg = await self.agent_system.chat_and_store_by_user(new_thread_id, None, user_id)
         response = ORJSONResponse(
@@ -303,10 +303,7 @@ class ChatController(BaseController):
         """
         if not audio.content_type.startswith("audio/"):
             raise STTUnsupportedAudioFormat()
-        audio_bytes = await self.stt_service.verify_audio_format(audio.file)
-        text_msg = await self.stt_service.convert_audio_to_text(audio_bytes)
-        text_msg += " " + await self.stt_service.flush()
-        text_msg = text_msg.strip()
+        text_msg = self.stt_service.convert_audio_to_text(await audio.read())
         return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
     async def post_speak_message(
@@ -323,8 +320,11 @@ class ChatController(BaseController):
             raise MessageIdInvalid()
 
         audio_file = io.BytesIO()
-        await self.tts_service.convert_text_to_audio(message.messages[0].message, audio_file)
-        return Response(content=audio_file.getvalue(), media_type="audio/wav")
+        self.tts_service.convert_text_to_audio(message.messages[0].message, audio_file)
+        media_type = None
+        if self.tts_service.get_audio_format() == "WAV":
+            media_type = "audio/wav"
+        return Response(content=audio_file.getvalue(), media_type=media_type)
 
     def filter_message(self, message: str, strip=True) -> str:
         flags = _config.api_message_response_filter_flags

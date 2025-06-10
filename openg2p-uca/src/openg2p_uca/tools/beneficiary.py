@@ -14,9 +14,7 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 class GetBeneficiaryIdTool(BaseTool):
     """
-    Checks whether the user, with the given user_id,
-    exists in the program, with the program_id
-    and returns beneficiary id and status.
+    This tool can be called to check the beneficiary status or enrollment status of the user against given program.
     """
 
     def __init__(self, **kw):

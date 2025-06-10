@@ -1,64 +1,97 @@
+import io
 import logging
-import subprocess
-from typing import BinaryIO
 
-import ffmpeg
+import av
 import orjson
 import vosk
 
 from ...config import Settings
-from ...errors import STTUnsupportedAudioFormat
-from .base import BaseSTTService
+from ...errors import BaseLlmCommonException, STTUnsupportedAudioFormat
+from .base import BaseSTTRequest, BaseSTTService
 
 _config: Settings = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
+
+
+class VoskSTTRequest(BaseSTTRequest):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.recognizer: vosk.KaldiRecognizer = None
+        self.is_silence_detected_in_end: bool = False
 
 
 class VoskSTTService(BaseSTTService):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.model: vosk.Model = None
-        self.recognizer: vosk.KaldiRecognizer = None
+        self.resampler: av.AudioResampler = None
 
     async def initialize(self):
         """VOSK initialization."""
         model_path = _config.stt_vosk_model_directory.removesuffix("/")
         self.model = vosk.Model(model_path=f"{model_path}/{_config.stt_vosk_model_name}")
-        self.recognizer = vosk.KaldiRecognizer(self.model, _config.stt_supported_sample_rate)
+        self.resampler = av.AudioResampler(
+            format="s16", layout="mono", rate=_config.stt_supported_sample_rate
+        )
 
     async def aclose(self):
-        """No closing required for VOSK service."""
+        """Closes VOSK STT service."""
+        # No closing required for Vosk STT service.
 
-    async def verify_audio_format(self, audio: BinaryIO) -> bytes:
-        """Takes audio from file object, verifies format,
-        return audio_bytes which can be directly passed to the convert function."""
-        ffmpeg_process: subprocess.Popen = (
-            ffmpeg.input("pipe:0")
-            .output(
-                "pipe:1",
-                format="s16le",
-                acodec="pcm_s16le",
-                ac="1",
-                ar=str(_config.stt_supported_sample_rate),
-            )
-            .run_async(pipe_stdin=True, pipe_stdout=True, pipe_stderr=True, overwrite_output=True)
-        )
-        out_bytes, err_bytes = ffmpeg_process.communicate(audio.read())
-        _logger.debug("FFmpeg error_out. %s", err_bytes.decode())
-        if ffmpeg_process.returncode != 0:
-            _logger.debug("FFmpeg error_out. %s", err_bytes.decode())
-            # _logger.debug("FFmpeg std_out. %s", out_bytes.decode())
-            raise STTUnsupportedAudioFormat()
-        return out_bytes
+    def create_new_request(self) -> VoskSTTRequest:
+        """Creates a new Vosk STT request."""
+        request = VoskSTTRequest()
+        request.recognizer = vosk.KaldiRecognizer(self.model, _config.stt_supported_sample_rate)
+        return request
 
-    async def convert_audio_to_text(self, audio: bytes) -> str:
-        """Converts audio, a file-like object, to text. Returns string."""
-        silence = self.recognizer.AcceptWaveform(audio)
-        if silence:
-            return orjson.loads(self.recognizer.Result())["text"]
+    def convert_audio_format(self, request: VoskSTTRequest, audio: bytes) -> bytes:
+        """Convert input audio into the format required by VOSK."""
+        return self.convert_audio_to_pcm_s16le(audio)
+
+    def add_audio_to_request(self, request: VoskSTTRequest, audio: bytes):
+        """Adds the given audio bytes into the Vosk STT request."""
+        request.is_silence_detected_in_end = request.recognizer.AcceptWaveform(audio)
+
+    def convert_request_to_text(self, request: VoskSTTRequest) -> str:
+        """Converts VoskSTTRequest to text."""
+        if self.is_silence_detected(request):
+            return orjson.loads(request.recognizer.Result())["text"]
         else:
-            return orjson.loads(self.recognizer.PartialResult())["partial"]
+            return orjson.loads(request.recognizer.PartialResult())["partial"]
 
-    async def flush(self) -> str:
-        """Flushes any audio present in the buffers and returns leftover text."""
-        return orjson.loads(self.recognizer.FinalResult())["text"]
+    def flush_audio_in_request(self, request: VoskSTTRequest) -> str:
+        """Flushes any VoskSTTRequest and returns leftover text."""
+        return orjson.loads(request.recognizer.FinalResult())["text"]
+
+    def is_silence_detected(self, request: VoskSTTRequest) -> bool:
+        """Returns if silence is detected at the end of the audio in the request."""
+        return request.is_silence_detected_in_end
+
+    def convert_audio_to_pcm_s16le(self, audio: bytes) -> bytes:
+        output_bytes_io = io.BytesIO()
+        input_bytes_io = io.BytesIO(audio)
+        try:
+            with av.open(input_bytes_io, mode="r") as container:
+                audio_stream = None
+                for stream in container.streams.audio:
+                    audio_stream = stream
+                    break
+
+                if not audio_stream:
+                    err = STTUnsupportedAudioFormat()
+                    err.message += ". Empty Audio file received."
+                    raise err
+
+                for frame in container.decode(audio_stream):
+                    resampled_frames = self.resampler.resample(frame)
+
+                    for resampled_frame in resampled_frames:
+                        output_bytes_io.write(resampled_frame.to_ndarray().flatten().tobytes())
+
+            return output_bytes_io.getvalue()
+        except BaseLlmCommonException as e:
+            raise e
+        except Exception as e:
+            err = STTUnsupportedAudioFormat()
+            err.message += ". Unknown error occured during audio decoding."
+            raise err from e

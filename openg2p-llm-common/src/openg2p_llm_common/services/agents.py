@@ -188,7 +188,7 @@ class BaseAgentSystem(BaseService):
     ) -> ChatThread:
         initialized_at = initialized_at or datetime.now(timezone.utc)
         user_profile = user_profile or {}
-        auth_params = {f"auth_{key}": val for key, val in user_profile}
+        auth_params = {f"auth_{key}": val for key, val in user_profile.items()}
         auth_params["auth_user_id"] = user_id
         system_prompt_params = system_prompt_params or {}
         system_prompt_params = {**auth_params, **system_prompt_params}
@@ -205,7 +205,7 @@ class BaseAgentSystem(BaseService):
                 user_id=user_id,
                 sent_at=initialized_at,
                 message_by="system",
-                message=self.get_system_prompt_suffix_to_store().format(**system_prompt_params),
+                message=self.get_system_prompt_suffix_to_store().format(**system_prompt_params).strip(),
             )
         )
         return thread
