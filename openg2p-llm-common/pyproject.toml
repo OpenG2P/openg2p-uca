@@ -22,7 +22,7 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 stt-vosk = ["av >=14.0.0", "vosk"]
-tts-parler = ["transformers", "parler-tts @ git+https://github.com/huggingface/parler-tts.git"]
+tts-parler = ["transformers", "num2words", "nltk", "parler-tts @ git+https://github.com/huggingface/parler-tts.git"]
 
 [project.urls]
 Homepage = "https://openg2p.org"

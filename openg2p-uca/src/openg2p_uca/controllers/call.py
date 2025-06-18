@@ -127,9 +127,10 @@ class CallController(BaseController):
 
         with open(_config.call_standby_message_path) as file:
             self.call_standby_message_text = file.read().strip()
-        self.call_standby_message_audio = self.tts_service.generate_audio_frame_from_raw_audio(
-            self.tts_service.convert_text_to_raw_audio(self.call_standby_message_text)
-        )
+        if self.tts_service:
+            self.call_standby_message_audio = self.tts_service.generate_audio_frame_from_raw_audio(
+                self.tts_service.convert_text_to_raw_audio(self.call_standby_message_text)
+            )
 
     async def get_call_meta(self):
         return self.meta_response
@@ -222,7 +223,11 @@ class CallController(BaseController):
         done_async_tasks, pending_async_tasks = await asyncio.wait(
             [task, timer_task], return_when=asyncio.FIRST_COMPLETED
         )
-        if task in pending_async_tasks and timer_task in done_async_tasks:
+        if (
+            task in pending_async_tasks
+            and timer_task in done_async_tasks
+            and self.call_standby_message_audio is not None
+        ):
             # LLM Response taking longer than standby timer.
             # So respond with standby message
             await rtc_conn.add_output_audio_frames(self.call_standby_message_audio)

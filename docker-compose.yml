@@ -73,6 +73,13 @@ services:
       restart_policy:
         condition: unless-stopped
 
+  turn:
+    image: coturn/coturn:4.7.0-r0-alpine
+    network_mode: host
+    deploy:
+      restart_policy:
+        condition: unless-stopped
+
 networks:
   network:
     driver: bridge

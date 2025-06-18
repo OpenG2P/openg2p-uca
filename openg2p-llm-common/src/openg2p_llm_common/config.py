@@ -63,3 +63,8 @@ class Settings(BaseSettings):
         # "Do not stop after exclamation."
     )
     tts_parler_description_tokenizer: bool = True
+    tts_parler_arbitrary_text_mode: bool = False
+    tts_parler_splitlines_while_convert: bool = True
+    tts_parler_nltk_server_url: str | None = None
+    tts_parler_nltk_download_dir: str = "./models/nltk"
+    tts_parler_nltk_lang: str = "english"
