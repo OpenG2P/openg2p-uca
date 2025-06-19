@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # TODO: Implement clearly.
     chat_store_messages_limit: int = 1000
 
+    chat_store_default_name: str = "general"
     chat_store_es_enabled: bool = True
     chat_store_es_url: str = "http://localhost:9200"
     chat_store_es_username: str = ""

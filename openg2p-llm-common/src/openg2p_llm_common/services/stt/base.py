@@ -40,12 +40,6 @@ class BaseSTTService(BaseService):
         can be passed to the convert_request_to_text function. To be implemented by STT impl."""
         raise NotImplementedError()
 
-    def convert_and_add_audio_to_request(self, request: BaseSTTRequest, audio: bytes) -> None:
-        """Converts the input audio and adds it to the request. The request can then be passed
-        to the convert_request_to_text function. To be implemented by STT impl."""
-        audio = self.convert_audio_format(request, audio)
-        self.add_audio_to_request(request, audio)
-
     def convert_request_to_text(self, request: BaseSTTRequest) -> str:
         """Converts stt_request to text. Returns string. To be implemented by STT impl."""
         raise NotImplementedError()
@@ -67,7 +61,8 @@ class BaseSTTService(BaseService):
         This is useful for converting prerecorded audio messages or audio files to text,
         where the entire audio is already available. To be implemented by STT impl."""
         request = self.create_new_request(**kw)
-        self.convert_and_add_audio_to_request(request, audio, **kw)
+        audio = self.convert_audio_format(request, audio, **kw)
+        self.add_audio_to_request(request, audio, **kw)
         output_text = self.convert_request_to_text(request, **kw)
         output_text += " " + self.flush_audio_in_request(request, **kw)
         return output_text.strip()

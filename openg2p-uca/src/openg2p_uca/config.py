@@ -17,6 +17,10 @@ class Settings(AuthSettings, BaseSettings):
     openapi_description: str = ""
     openapi_version: str = __version__
 
+    auth_session_store_host: str = "localhost"
+    auth_session_store_port: int = 6379
+    auth_session_store_db: int = 0
+    auth_session_store_password: str = "valkey"
     auth_api_post_new_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_put_change_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_get_current_chat_thread: ApiAuthSettings = ApiAuthSettings(enabled=True)
@@ -26,11 +30,18 @@ class Settings(AuthSettings, BaseSettings):
     auth_api_get_chat_messages: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_api_post_speak_message: ApiAuthSettings = ApiAuthSettings(enabled=True)
     auth_dummy_user_data: dict = {}
+    auth_dummy_otp: str = "111111"
 
     chat_store_messages_es_index: str = "uca_messages"
     chat_store_threads_es_index: str = "uca_threads"
 
-    user_id_id_type: str = "NATIONAL ID TOKEN"
+    chat_store_transient_enabled: bool = True
+    chat_store_transient_name: str = "transient"
+    chat_store_transient_messages_index: str = "uca_messages_transient"
+    chat_store_transient_threads_index: str = "uca_threads_transient"
+
+    greeting_message_on_chat: bool = True
+    greeting_message_on_quick_chat: bool = True
 
     ## Main Agent Config
     main_agent_enabled: bool = True
@@ -57,12 +68,23 @@ class Settings(AuthSettings, BaseSettings):
     grm_ticket_new_stage_lang: str = "en_US"
     grm_ticket_new_stage_name: str = "New"
 
-    user_id_key_in_auth: str = "sub"
+    session_id_cookie_name: str = "session_id"
+    session_id_cookie_path: str = "/"
+    session_id_cookie_secure: bool = True
+    session_id_cookie_httponly: bool = True
+    session_id_cookie_max_age: int | None = None
+
+    qc_session_id_cookie_name: str = "qc_session_id"
+    qc_session_id_cookie_path: str = "/"
+    qc_session_id_cookie_secure: bool = True
+    qc_session_id_cookie_httponly: bool = True
+    qc_session_id_cookie_max_age: int | None = None
+
     thread_id_cookie_name: str = "thread_id"
     thread_id_cookie_path: str = "/"
     thread_id_cookie_secure: bool = True
     thread_id_cookie_httponly: bool = True
-    thread_id_cookie_max_age: int | None = 3600 * 2
+    thread_id_cookie_max_age: int | None = None
 
     stt_vosk_enabled: bool = False
     tts_parler_enabled: bool = False

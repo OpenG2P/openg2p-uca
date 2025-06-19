@@ -1,5 +1,4 @@
 # USER DETAILS
-- ID: "{auth_user_id}"
-- Name: "{auth_name}"
-- Date of birth: "{auth_birthdate}"
-- Gender: "{auth_gender}"
+{auth_user_id_stmt}
+{auth_profile_stmt}
+{auth_status_stmt}

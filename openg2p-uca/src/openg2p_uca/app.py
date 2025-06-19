@@ -5,7 +5,6 @@ from .config import Settings
 
 _config: Settings = Settings.get_config()
 
-from openg2p_fastapi_auth.controllers.oauth_controller import OAuthController
 from openg2p_fastapi_common.context import component_registry
 from openg2p_fastapi_common.ping import PingController
 from openg2p_llm_common.app import Initializer as BaseInitializer
@@ -18,6 +17,9 @@ from .agents.main import MainAgent
 from .controllers.auth import AuthController
 from .controllers.call import CallController
 from .controllers.chat import ChatController
+from .controllers.oauth import OAuthController
+from .controllers.quick_chat import QuickChatController
+from .tools.auth import PerformAuthenticationStepOneSendOtpTool, PerformAuthenticationStepTwoValidateOtpTool
 from .tools.beneficiary import GetBeneficiaryIdTool
 from .tools.grievance_ticket import CreateGrievanceTicketTool
 from .tools.grievance_ticket_status import GetGrievanceTicketStatusTool
@@ -32,9 +34,15 @@ class Initializer(BaseInitializer):
         AuthController().post_init()
         OAuthController().post_init()
         ChatController().post_init()
+        QuickChatController().post_init()
         CallController().post_init()
-        if _config.chat_store_es_enabled:
-            ESChatStoreService(enabled=_config.chat_store_es_enabled)
+        ESChatStoreService()
+        ESChatStoreService(
+            enabled=_config.chat_store_transient_enabled,
+            name=_config.chat_store_transient_name,
+            message_index=_config.chat_store_transient_messages_index,
+            threads_index=_config.chat_store_transient_threads_index,
+        )
 
         if _config.stt_vosk_enabled:
             from openg2p_llm_common.services.stt.vosk import VoskSTTService
@@ -47,6 +55,8 @@ class Initializer(BaseInitializer):
             ParlerTTSService(enabled=_config.tts_parler_enabled)
 
         ChangeAgentTool()
+        PerformAuthenticationStepOneSendOtpTool()
+        PerformAuthenticationStepTwoValidateOtpTool()
         ProgramInfoTool()
         GetBeneficiaryIdTool()
         CreateGrievanceTicketTool()

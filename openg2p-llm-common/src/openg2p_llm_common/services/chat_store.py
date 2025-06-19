@@ -15,11 +15,11 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
 class ChatStoreService(BaseService):
-    def __init__(self, enabled=True, **kwargs):
+    def __init__(self, enabled=True, name=_config.chat_store_default_name, **kwargs):
         """
         Abstract Service. Donot instantiate directly.
         """
-        super().__init__(**kwargs)
+        super().__init__(name=name, **kwargs)
         self.enabled: bool = enabled
 
     async def initialize(self):
@@ -67,16 +67,34 @@ class ChatStoreService(BaseService):
 
 
 class ESChatStoreService(ChatStoreService):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(
+        self,
+        url=_config.chat_store_es_url,
+        message_index=_config.chat_store_messages_es_index,
+        threads_index=_config.chat_store_threads_es_index,
+        messages_search_limit=_config.chat_store_messages_limit,
+        username=_config.chat_store_es_username,
+        password=_config.chat_store_es_password,
+        ssl_verify=_config.chat_store_es_ssl_verify,
+        api_timeout=_config.chat_store_es_timeout_secs,
+        enabled=_config.chat_store_es_enabled,
+        **kwargs,
+    ):
+        super().__init__(enabled=enabled, **kwargs)
         self.client: httpx.AsyncClient = None
+        self.url = url
+        self.messages_index = message_index
+        self.threads_index = threads_index
+        self.messages_search_limit = messages_search_limit
+        self.username = username
+        self.password = password
+        self.ssl_verify = ssl_verify
+        self.api_timeout = api_timeout
 
     async def initialize(self):
         self.client = httpx.AsyncClient(
-            auth=(_config.chat_store_es_username, _config.chat_store_es_password)
-            if _config.chat_store_es_username
-            else None,
-            verify=_config.chat_store_es_ssl_verify,
+            auth=(self.username, self.password) if self.username else None,
+            verify=self.ssl_verify,
         )
 
     async def aclose(self):
@@ -85,7 +103,7 @@ class ESChatStoreService(ChatStoreService):
     async def migrate(self):
         await self.initialize()
         await self.create_or_update_index_mapping(
-            _config.chat_store_messages_es_index,
+            self.messages_index,
             {
                 "properties": {
                     "id": {"type": "keyword"},
@@ -99,7 +117,7 @@ class ESChatStoreService(ChatStoreService):
             },
         )
         await self.create_or_update_index_mapping(
-            _config.chat_store_threads_es_index,
+            self.threads_index,
             {
                 "properties": {
                     "id": {"type": "keyword"},
@@ -112,7 +130,7 @@ class ESChatStoreService(ChatStoreService):
 
     async def create_or_update_index_mapping(self, index: str, mapping: dict):
         # Check if the index exists
-        res = await self.client.head(f"{_config.chat_store_es_url}/{index}")
+        res = await self.client.head(f"{self.url}/{index}")
         if res.status_code == 404:
             index_exists = False
         else:
@@ -121,10 +139,10 @@ class ESChatStoreService(ChatStoreService):
 
         if not index_exists:
             _logger.info("Chat Store ES: Index doesn't exist. Creating...")
-            res = await self.client.put(f"{_config.chat_store_es_url}/{index}", json={"mappings": mapping})
+            res = await self.client.put(f"{self.url}/{index}", json={"mappings": mapping})
         else:
             _logger.info("Chat Store ES: Index already exists. Updating mapping...")
-            res = await self.client.put(f"{_config.chat_store_es_url}/{index}/_mapping", json=mapping)
+            res = await self.client.put(f"{self.url}/{index}/_mapping", json=mapping)
         res.raise_for_status()
 
     async def get_messages(
@@ -154,14 +172,14 @@ class ESChatStoreService(ChatStoreService):
             raise GetMessagesMissingParamsError()
 
         if limit < 0:
-            limit = _config.chat_store_messages_limit
+            limit = self.messages_search_limit
         query = {
             "query": {"bool": {"must": must_match}},
             "from": limit * page,
             "size": limit,
             "sort": [{"sent_at": {"order": sort}}],
         }
-        res = await self.es_search(query, _config.chat_store_messages_es_index)
+        res = await self.es_search(query, self.messages_index)
         # TODO: Handle es search API size limit problem
 
         total_count = ((res.get("hits") or {}).get("total") or {}).get("value") or 0
@@ -178,9 +196,7 @@ class ESChatStoreService(ChatStoreService):
         )
 
     async def put_message(self, chat_message: ChatMessage):
-        await self.es_put_by_id(
-            chat_message.model_dump(mode="json"), chat_message.id, _config.chat_store_messages_es_index
-        )
+        await self.es_put_by_id(chat_message.model_dump(mode="json"), chat_message.id, self.messages_index)
 
     async def get_threads(
         self,
@@ -200,14 +216,14 @@ class ESChatStoreService(ChatStoreService):
             raise GetMessagesMissingParamsError()
 
         if limit < 0:
-            limit = _config.chat_store_messages_limit
+            limit = self.messages_search_limit
         query = {
             "query": {"bool": {"must": must_match}},
             "from": limit * page,
             "size": limit,
             "sort": [{"created_at": {"order": sort}}],
         }
-        res = await self.es_search(query, _config.chat_store_threads_es_index)
+        res = await self.es_search(query, self.threads_index)
         # TODO: Handle es search API size limit problem
 
         total_count = ((res.get("hits") or {}).get("total") or {}).get("value") or 0
@@ -223,17 +239,15 @@ class ESChatStoreService(ChatStoreService):
         )
 
     async def put_thread(self, chat_thread: ChatThread):
-        await self.es_put_by_id(
-            chat_thread.model_dump(mode="json"), chat_thread.id, _config.chat_store_threads_es_index
-        )
+        await self.es_put_by_id(chat_thread.model_dump(mode="json"), chat_thread.id, self.threads_index)
 
     async def es_search(self, query: dict, index: str) -> dict:
         res = await self.client.request(
             "GET",
-            f"{_config.chat_store_es_url}/{index}/_search",
+            f"{self.url}/{index}/_search",
             headers={"content-type": "application/json"},
             content=orjson.dumps(query),
-            timeout=_config.chat_store_es_timeout_secs,
+            timeout=self.api_timeout,
         )
         if res.status_code == 404:
             return None
@@ -260,8 +274,8 @@ class ESChatStoreService(ChatStoreService):
                 "doc_as_upsert": True,
             }
         res = await self.client.post(
-            f"{_config.chat_store_es_url}/{index}/_update/{id}?refresh={refresh}",
-            timeout=_config.chat_store_es_timeout_secs,
+            f"{self.url}/{index}/_update/{id}?refresh={refresh}",
+            timeout=self.api_timeout,
             headers={"content-type": "application/json"},
             content=orjson.dumps(json_body),
         )

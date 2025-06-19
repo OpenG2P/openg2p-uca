@@ -20,6 +20,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
     """
     Retrieves the status of grievance tickets for a specific beneficiary and program.
     Call the GetBeneficiaryIdTool to get the beneficiary ID.
+    User Authentication required to be Successful.
     Returns ticket details including status, resolution message, and resolution time.
     """
 

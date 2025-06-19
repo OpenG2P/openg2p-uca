@@ -7,7 +7,7 @@ from .ollama import OllamaChatMessageRole
 
 class ChatThread(BaseModel):
     id: str
-    user_id: str
+    user_id: str | None
     created_at: datetime
 
     @field_serializer("created_at")
@@ -27,7 +27,7 @@ class ChatMessage(BaseModel):
 
     id: str
     thread_id: str
-    user_id: str
+    user_id: str | None
     sent_at: datetime
     message_by: OllamaChatMessageRole
     message: str

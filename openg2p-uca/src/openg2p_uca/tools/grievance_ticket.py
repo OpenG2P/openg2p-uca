@@ -22,6 +22,7 @@ class CreateGrievanceTicketTool(BaseTool):
     Requires beneficiary_id, program_id, and complaint details.
     "subject" is a summarized version of user's issue.
     "description" is the elaborate version of user's issue.
+    User Authentication required to be Successful.
     """
 
     def __init__(self, **kw):

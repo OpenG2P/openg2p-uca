@@ -21,6 +21,7 @@ dependencies = [
   "asyncpg",
   "psycopg2",
   "aiortc >=1.13.0",
+  "valkey[libvalkey]",
 ]
 dynamic = ["version"]
 

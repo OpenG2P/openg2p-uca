@@ -136,14 +136,15 @@ class BaseAgentSystem(BaseService):
         self.enabled = enabled
         self._system_prompt_suffix_to_store: str = None
 
-        self._chat_store: ChatStoreService = None
+        self._default_chat_store = None
         self._agent_name_map: dict[str, BaseAgent] = {}
 
-    @property
-    def chat_store_service(self):
-        if not self._chat_store:
-            self._chat_store = ChatStoreService.get_component()
-        return self._chat_store
+    def get_chat_store(self, chat_store: ChatStoreService | None = None, **kw) -> ChatStoreService:
+        if chat_store:
+            return chat_store
+        if not self._default_chat_store:
+            self._default_chat_store = ChatStoreService.get_component(name=_config.chat_store_default_name)
+        return self._default_chat_store
 
     def get_agent(self, agent_name: str) -> BaseAgent | None:
         """Returns agent with the given name. agent_name parameter cant be null or empty."""
@@ -181,15 +182,37 @@ class BaseAgentSystem(BaseService):
     async def initialize_chat_thread(
         self,
         thread_id: str,
-        user_id: str,
         user_profile: dict | None = None,
         system_prompt_params: dict | None = None,
         initialized_at: datetime | None = None,
+        chat_store: ChatStoreService | None = None,
     ) -> ChatThread:
         initialized_at = initialized_at or datetime.now(timezone.utc)
-        user_profile = user_profile or {}
-        auth_params = {f"auth_{key}": val for key, val in user_profile.items()}
-        auth_params["auth_user_id"] = user_id
+        auth_params = {}
+        if user_profile:
+            auth_params.update({f"auth_{key}": val for key, val in user_profile.items()})
+            auth_params.update(
+                {
+                    "auth_user_id_stmt": f'- ID: {auth_params.get("auth_user_id") or ""}',
+                    "auth_profile_stmt": (
+                        f'- Name: "{auth_params.get("auth_name") or ""}"\n'
+                        f'- Date of birth: "{auth_params.get("auth_birthdate") or ""}"\n'
+                        f'- Gender: "{auth_params.get("auth_gender") or ""}"'
+                    ),
+                    "auth_status_stmt": "User Authentication Successful.",
+                }
+            )
+        else:
+            auth_params.update(
+                {
+                    "auth_user_id": "",
+                    "auth_user_id_stmt": "",
+                    "auth_profile_stmt": "",
+                    "auth_status_stmt": "",
+                }
+            )
+        user_id = auth_params.get("auth_user_id") or None
+
         system_prompt_params = system_prompt_params or {}
         system_prompt_params = {**auth_params, **system_prompt_params}
         thread = ChatThread(
@@ -197,8 +220,8 @@ class BaseAgentSystem(BaseService):
             user_id=user_id,
             created_at=initialized_at,
         )
-        await self.chat_store_service.put_thread(thread)
-        await self.chat_store_service.put_message(
+        await self.get_chat_store(chat_store=chat_store).put_thread(thread)
+        await self.get_chat_store(chat_store=chat_store).put_message(
             ChatMessage(
                 id=str(uuid4()),
                 thread_id=thread_id,
@@ -217,12 +240,13 @@ class BaseAgentSystem(BaseService):
         user_id: str | None = None,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
+        chat_store: ChatStoreService | None = None,
         **kw,
     ) -> list[OllamaChatResponse | OllamaChatMessage]:
         """
         Chat API - System Level. Gets past messages from the thread and sends new message to agent.
         """
-        full_messages = await self.get_past_messages(thread_id, user_id=user_id, **kw)
+        full_messages = await self.get_past_messages(thread_id, user_id=user_id, chat_store=chat_store, **kw)
         if not full_messages:
             raise ThreadIdInvalid()
 
@@ -236,13 +260,14 @@ class BaseAgentSystem(BaseService):
             full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
         )
 
-    async def chat_and_store_by_user(
+    async def chat_and_store(
         self,
         thread_id: str,
         message: str | None,
-        user_id: str,
+        user_id: str | None = None,
         message_sent_at: datetime | None = None,
         system_prompt_params: dict | None = None,
+        chat_store: ChatStoreService | None = None,
         **kw,
     ) -> ChatMessage:
         """
@@ -258,6 +283,7 @@ class BaseAgentSystem(BaseService):
             user_id=user_id,
             message_sent_at=message_sent_at,
             system_prompt_params=system_prompt_params,
+            chat_store=chat_store,
             **kw,
         )
 
@@ -272,7 +298,7 @@ class BaseAgentSystem(BaseService):
                 message=message,
                 last_used_agent=self.get_agent_name_from_messages(res),
             )
-            await self.chat_store_service.put_message(user_chat_message)
+            await self.get_chat_store(chat_store=chat_store).put_message(user_chat_message)
         for msg in res:
             if isinstance(msg, OllamaChatResponse):
                 message_sent_at = msg.created_at
@@ -287,7 +313,7 @@ class BaseAgentSystem(BaseService):
                     last_used_agent=msg.message.agent_name,
                 )
                 if msg.message.content:
-                    await self.chat_store_service.put_message(chat_msg)
+                    await self.get_chat_store(chat_store=chat_store).put_message(chat_msg)
             elif isinstance(msg, OllamaChatMessage):
                 message_sent_at += timedelta(milliseconds=1)
                 chat_msg = ChatMessage(
@@ -301,15 +327,19 @@ class BaseAgentSystem(BaseService):
                     last_used_agent=msg.agent_name,
                 )
                 if msg.content:
-                    await self.chat_store_service.put_message(chat_msg)
+                    await self.get_chat_store(chat_store=chat_store).put_message(chat_msg)
 
         # Returns the last chat message to User. TODO: Check last message is LLM Response.
         return chat_msg
 
     async def get_past_messages(
-        self, thread_id: str | None, user_id: str | None = None, **kw
+        self,
+        thread_id: str | None,
+        user_id: str | None = None,
+        chat_store: ChatStoreService | None = None,
+        **kw,
     ) -> list[OllamaChatMessage]:
-        full_messages = await self.chat_store_service.get_messages(
+        full_messages = await self.get_chat_store(chat_store=chat_store).get_messages(
             thread_id=thread_id, user_id=user_id, limit=-1, sort="asc", **kw
         )
         return [

@@ -57,7 +57,10 @@ class VoskSTTService(BaseSTTService):
         if self.is_silence_detected(request):
             return orjson.loads(request.recognizer.Result())["text"]
         else:
-            return orjson.loads(request.recognizer.PartialResult())["partial"]
+            # It is not required to share this with the user
+            # in our context. When flush is called it will be included.
+            request.recognizer.PartialResult()
+            return ""
 
     def flush_audio_in_request(self, request: VoskSTTRequest) -> str:
         """Flushes any VoskSTTRequest and returns leftover text."""
