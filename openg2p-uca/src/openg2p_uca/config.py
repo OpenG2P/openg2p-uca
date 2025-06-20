@@ -40,6 +40,8 @@ class Settings(AuthSettings, BaseSettings):
     chat_store_transient_messages_index: str = "uca_messages_transient"
     chat_store_transient_threads_index: str = "uca_threads_transient"
 
+    user_id_id_type: str = "NATIONAL ID TOKEN"
+
     greeting_message_on_chat: bool = True
     greeting_message_on_quick_chat: bool = True
 

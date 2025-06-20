@@ -50,7 +50,8 @@ class AuthController(BaseAuthController):
         )
 
         self._session_store = None
-        self._id_type_cache: dict[int, int] = {}
+        self._lp_id_type_cache: dict[int, int] = {}
+        self._id_type_id_cache: dict[str, int] = {}
 
     @property
     def session_store(self) -> Valkey:
@@ -75,10 +76,10 @@ class AuthController(BaseAuthController):
         return ap.map_auth_provider_to_login_provider() if ap else None
 
     async def get_login_provider_id_type(self, login_provider_id: int) -> int:
-        if login_provider_id not in self._id_type_cache:
+        if login_provider_id not in self._lp_id_type_cache:
             ap = await AuthOauthProviderORM.get_by_id(login_provider_id)
-            self._id_type_cache[login_provider_id] = ap.g2p_id_type
-        return self._id_type_cache[login_provider_id]
+            self._lp_id_type_cache[login_provider_id] = ap.g2p_id_type
+        return self._lp_id_type_cache[login_provider_id]
 
     async def get_profile(self, auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())]):
         """
@@ -171,11 +172,27 @@ class AuthController(BaseAuthController):
         orig_session = session
         if not orig_session:
             session = async_sessionmaker(dbengine.get())()
-        stmt = text("SELECT id from res_partner where unique_id = :value")
-        result = await session.execute(stmt, {"value": user_id})
+        stmt = text("SELECT partner_id from g2p_reg_id where value = :value and id_type = :id_type")
+        result = await session.execute(
+            stmt, {"value": user_id, "id_type": await self.get_id_type_id(_config.user_id_id_type, session)}
+        )
         partner_id = result.scalar()
 
         if not orig_session:
             await session.close()
 
         return int(partner_id) if partner_id else None
+
+    async def get_id_type_id(self, id_type: str, session: AsyncSession = None) -> int | None:
+        if id_type in self._id_type_id_cache:
+            return self._id_type_id_cache[id_type]
+        orig_session = session
+        if not orig_session:
+            session = async_sessionmaker(dbengine.get())()
+        stmt = text("SELECT id from g2p_id_type where name = :name")
+        result = await session.execute(stmt, {"name": id_type})
+        id_type_id = result.scalar()
+        self._id_type_id_cache[id_type] = int(id_type_id) if id_type_id else None  # Cache the id_type_id
+        if not orig_session:
+            await session.close()
+        self._id_type_id_cache[id_type]
