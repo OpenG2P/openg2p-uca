@@ -31,7 +31,7 @@ This is an exploration project to build an AI based Unified Conversation Agent (
   - Change API_BACKEND_URL ENV var to `API_BACKEND_URL=http://172.17.0.1:8000/` for Linux. Or `API_BACKEND_URL=http://host.docker.internal:8000/` for Windows/MacOS.
 - Start opensearch and UI.
   ```sh
-  docker compose up -d opensearch-dashboards ui turn
+  docker compose up -d opensearch-dashboards ui turn session-store
   ```
 - Create python virtual env and install python module.
   ```sh
