@@ -2,6 +2,7 @@ import logging
 
 from openg2p_llm_common.services.agents import BaseAgent
 from openg2p_llm_common.services.ollama_client import OllamaClientService
+from openg2p_llm_common.utils.timing import time_it
 
 from ..config import Settings
 
@@ -13,6 +14,7 @@ class MainAgent(BaseAgent):
     def __init__(self, name="main", **kw):
         super().__init__(name=name, **kw)
 
+    @time_it("MainAgent.initialize")
     async def initialize(self):
         with open(_config.main_agent_system_prompt_path) as file:
             self.system_prompt = file.read()

@@ -21,6 +21,7 @@ from openg2p_llm_common.schemas.ollama import OllamaChatMessage, OllamaChatRespo
 from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.stt.base import BaseSTTRequest, BaseSTTService
 from openg2p_llm_common.services.tts.base import BaseTTSService
+from openg2p_llm_common.utils.timing import time_it
 
 from ..config import Settings
 
@@ -188,6 +189,7 @@ class CallController(BaseController):
                     _logger.exception("Call WebSocket: Process Audio failed.")
                     break
 
+    @time_it("CallController.rtc_call_process_audio")
     async def rtc_call_process_audio(
         self, rtc_conn: UcaCallRTCPeerConnection, track: MediaStreamTrack, stt_request: BaseSTTRequest
     ):
@@ -236,6 +238,7 @@ class CallController(BaseController):
         rtc_conn.messages = [OllamaChatMessage(role="system", content=stored_system_prompt)]
         asyncio.create_task(self.llm_chat_speak(rtc_conn, **kw))
 
+    @time_it("CallController.llm_chat")
     async def llm_chat(
         self, rtc_conn: UcaCallRTCPeerConnection, message_sent_at: datetime | None = None, **kw
     ) -> str:
@@ -251,6 +254,7 @@ class CallController(BaseController):
                     rtc_conn.messages.append(msg)
         return rtc_conn.messages[-1].content
 
+    @time_it("CallController.llm_chat_speak")
     async def llm_chat_speak(
         self, rtc_conn: UcaCallRTCPeerConnection, message_sent_at: datetime | None = None, **kw
     ):

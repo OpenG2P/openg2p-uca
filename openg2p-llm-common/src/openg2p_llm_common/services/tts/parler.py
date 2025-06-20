@@ -9,6 +9,7 @@ from parler_tts import ParlerTTSForConditionalGeneration
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from ...config import Settings
+from ...utils.timing import time_it
 from .base import BaseTTSResponse, BaseTTSService
 
 _config: Settings = Settings.get_config(strict=False)
@@ -29,6 +30,7 @@ class ParlerTTSService(BaseTTSService):
         self.tokenizer: PreTrainedTokenizerBase = None
         self.description_input_ids: torch.Tensor = None
 
+    @time_it("ParlerTTSService.initialize")
     async def initialize(self):
         """ParlerTTS Initialization"""
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -50,26 +52,32 @@ class ParlerTTSService(BaseTTSService):
             self.description_input_ids = self.tokenizer(vd, return_tensors="pt").to(self.device)
         _logger.info("ParlerTTS Initialization - voice description initialized")
 
+    @time_it("ParlerTTSService.aclose")
     async def aclose(self):
         """Closes Parler TTS service."""
         # No closing required for ParlerTTSService
 
+    @time_it("ParlerTTSService.get_sample_rate")
     def get_sample_rate(self) -> int:
         """Gets the sample rate of output audio."""
         return self.model.config.sampling_rate
 
+    @time_it("ParlerTTSService.get_no_of_channels")
     def get_no_of_channels(self) -> int:
         """Gets number of channels in the output audio."""
         return 1  # TODO: remove hardcoding
 
+    @time_it("ParlerTTSService.get_bit_depth")
     def get_bit_depth(self) -> int:
         """Gets bit depth of the output audio."""
         return 16  # TODO: remove hardcoding
 
+    @time_it("ParlerTTSService.get_audio_format")
     def get_audio_format(self) -> str:
         """Gets the output audio format."""
         return "WAV"  # TODO: remove hardcoding
 
+    @time_it("ParlerTTSService.convert_text_to_raw_audio")
     def convert_text_to_raw_audio(self, text: str) -> ParlerTTSResponse:
         """Converts text to raw audio."""
         prompt_input_ids = self.tokenizer(text, return_tensors="pt").to(self.device)
@@ -90,10 +98,12 @@ class ParlerTTSService(BaseTTSService):
         ).astype(np.int16)
         return response
 
+    @time_it("ParlerTTSService.convert_raw_audio_to_playable")
     def convert_raw_audio_to_playable(self, raw_audio: ParlerTTSResponse, audio: BinaryIO):
         """Converts raw audio to playable audio and writes to the given file-like object."""
         sf.write(audio, raw_audio.raw_audio.squeeze(), self.get_sample_rate(), format="WAV")
 
+    @time_it("ParlerTTSService.generate_audio_frame_from_raw_audio")
     def generate_audio_frame_from_raw_audio(self, raw_audio: ParlerTTSResponse) -> av.AudioFrame:
         """Generates PyAV AudioFrame object from raw_audio."""
         alayout = "mono" if self.get_no_of_channels() < 2 else "stereo"

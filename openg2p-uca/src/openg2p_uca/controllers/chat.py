@@ -17,6 +17,7 @@ from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.chat_store import ChatStoreService
 from openg2p_llm_common.services.stt.base import BaseSTTService
 from openg2p_llm_common.services.tts.base import BaseTTSService
+from openg2p_llm_common.utils.timing import time_it
 
 from ..config import Settings
 from ..errors import AuthMissingUserId
@@ -291,6 +292,7 @@ class ChatController(BaseController):
             ]
         )
 
+    @time_it("ChatController.post_new_voice_message")
     async def post_new_voice_message(
         self,
         audio: UploadFile,
@@ -306,6 +308,7 @@ class ChatController(BaseController):
         text_msg = self.stt_service.convert_audio_to_text(await audio.read())
         return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
+    @time_it("ChatController.post_speak_message")
     async def post_speak_message(
         self,
         request: UcaChatSpeakMessageRequest,

@@ -7,6 +7,7 @@ import vosk
 
 from ...config import Settings
 from ...errors import BaseLlmCommonException, STTUnsupportedAudioFormat
+from ...utils.timing import time_it
 from .base import BaseSTTRequest, BaseSTTService
 
 _config: Settings = Settings.get_config(strict=False)
@@ -26,6 +27,7 @@ class VoskSTTService(BaseSTTService):
         self.model: vosk.Model = None
         self.resampler: av.AudioResampler = None
 
+    @time_it("VoskSTTService.initialize")
     async def initialize(self):
         """VOSK initialization."""
         model_path = _config.stt_vosk_model_directory.removesuffix("/")
@@ -34,24 +36,29 @@ class VoskSTTService(BaseSTTService):
             format="s16", layout="mono", rate=_config.stt_supported_sample_rate
         )
 
+    @time_it("VoskSTTService.aclose")
     async def aclose(self):
         """Closes VOSK STT service."""
         # No closing required for Vosk STT service.
 
+    @time_it("VoskSTTService.create_new_request")
     def create_new_request(self) -> VoskSTTRequest:
         """Creates a new Vosk STT request."""
         request = VoskSTTRequest()
         request.recognizer = vosk.KaldiRecognizer(self.model, _config.stt_supported_sample_rate)
         return request
 
+    @time_it("VoskSTTService.convert_audio_format")
     def convert_audio_format(self, request: VoskSTTRequest, audio: bytes) -> bytes:
         """Convert input audio into the format required by VOSK."""
         return self.convert_audio_to_pcm_s16le(audio)
 
+    @time_it("VoskSTTService.add_audio_to_request")
     def add_audio_to_request(self, request: VoskSTTRequest, audio: bytes):
         """Adds the given audio bytes into the Vosk STT request."""
         request.is_silence_detected_in_end = request.recognizer.AcceptWaveform(audio)
 
+    @time_it("VoskSTTService.convert_request_to_text")
     def convert_request_to_text(self, request: VoskSTTRequest) -> str:
         """Converts VoskSTTRequest to text."""
         if self.is_silence_detected(request):
@@ -59,14 +66,17 @@ class VoskSTTService(BaseSTTService):
         else:
             return orjson.loads(request.recognizer.PartialResult())["partial"]
 
+    @time_it("VoskSTTService.flush_audio_in_request")
     def flush_audio_in_request(self, request: VoskSTTRequest) -> str:
         """Flushes any VoskSTTRequest and returns leftover text."""
         return orjson.loads(request.recognizer.FinalResult())["text"]
 
+    @time_it("VoskSTTService.is_silence_detected")
     def is_silence_detected(self, request: VoskSTTRequest) -> bool:
         """Returns if silence is detected at the end of the audio in the request."""
         return request.is_silence_detected_in_end
 
+    @time_it("VoskSTTService.convert_audio_to_pcm_s16le")
     def convert_audio_to_pcm_s16le(self, audio: bytes) -> bytes:
         output_bytes_io = io.BytesIO()
         input_bytes_io = io.BytesIO(audio)

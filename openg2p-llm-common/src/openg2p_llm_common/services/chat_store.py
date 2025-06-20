@@ -9,6 +9,7 @@ from openg2p_fastapi_common.service import BaseService
 from ..config import Settings
 from ..errors import GetMessagesMissingParamsError
 from ..schemas.chat import ChatMessage, ChatThread, GetChatMessageResponse, GetChatThreadResponse
+from ..utils.timing import time_it
 
 _config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -31,6 +32,7 @@ class ChatStoreService(BaseService):
     async def migrate(self):
         raise NotImplementedError()
 
+    @time_it("ChatStoreService.get_messages")
     async def get_messages(
         self,
         thread_id: str = "",
@@ -46,9 +48,11 @@ class ChatStoreService(BaseService):
         """
         raise NotImplementedError()
 
+    @time_it("ChatStoreService.put_message")
     async def put_message(self, chat_message: ChatMessage):
         raise NotImplementedError()
 
+    @time_it("ChatStoreService.get_threads")
     async def get_threads(
         self,
         user_id: str = "",
@@ -62,6 +66,7 @@ class ChatStoreService(BaseService):
         """
         raise NotImplementedError()
 
+    @time_it("ChatStoreService.put_thread")
     async def put_thread(self, chat_thread: ChatThread):
         raise NotImplementedError()
 

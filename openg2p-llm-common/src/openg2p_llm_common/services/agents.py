@@ -10,6 +10,7 @@ from ..config import Settings
 from ..errors import ThreadIdInvalid
 from ..schemas.chat import ChatMessage, ChatThread
 from ..schemas.ollama import OllamaChatMessage, OllamaChatRequest, OllamaChatResponse
+from ..utils.timing import time_it
 from .chat_store import ChatStoreService
 from .ollama_client import OllamaClientService
 from .tools.box import ToolboxService
@@ -46,6 +47,7 @@ class BaseAgent(BaseService):
         await self.ollama_client.unload_model()
         await self.ollama_client.aclose()
 
+    @time_it("BaseAgent.chat")
     async def chat(
         self,
         messages: list[OllamaChatMessage],
@@ -79,6 +81,7 @@ class BaseAgent(BaseService):
         )
         return ollama_res
 
+    @time_it("BaseAgent.handle_tool_calls")
     async def handle_tool_calls(
         self,
         messages: list[OllamaChatMessage],
@@ -113,6 +116,7 @@ class BaseAgent(BaseService):
             messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
         )
 
+    @time_it("BaseAgent.render_system_prompt")
     def render_system_prompt(
         self,
         full_messages: list[OllamaChatMessage],
@@ -210,6 +214,7 @@ class BaseAgentSystem(BaseService):
         )
         return thread
 
+    @time_it("BaseAgentSystem.chat")
     async def chat(
         self,
         thread_id: str,
@@ -236,6 +241,7 @@ class BaseAgentSystem(BaseService):
             full_messages, message_sent_at=message_sent_at, system_prompt_params=system_prompt_params, **kw
         )
 
+    @time_it("BaseAgentSystem.chat_and_store_by_user")
     async def chat_and_store_by_user(
         self,
         thread_id: str,
@@ -306,6 +312,7 @@ class BaseAgentSystem(BaseService):
         # Returns the last chat message to User. TODO: Check last message is LLM Response.
         return chat_msg
 
+    @time_it("BaseAgentSystem.get_past_messages")
     async def get_past_messages(
         self, thread_id: str | None, user_id: str | None = None, **kw
     ) -> list[OllamaChatMessage]:

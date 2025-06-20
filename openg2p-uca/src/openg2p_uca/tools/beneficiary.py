@@ -2,6 +2,7 @@ import logging
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -21,6 +22,7 @@ class GetBeneficiaryIdTool(BaseTool):
         super().__init__(**kw)
         self._id_type_id: int = None
 
+    @time_it("GetBeneficiaryIdTool.call_tool")
     async def call_tool(
         self, request: GetBeneficiaryIdToolRequest, agent=None, messages=None, **kw
     ) -> GetBeneficiaryIdToolResponse:
@@ -36,6 +38,7 @@ class GetBeneficiaryIdTool(BaseTool):
                 ben.beneficiary_status = "applied"
             return ben
 
+    @time_it("GetBeneficiaryIdTool.get_partner_id")
     async def get_partner_id(self, user_id: str, session: AsyncSession) -> int | None:
         stmt = text("SELECT partner_id from g2p_reg_id where value = :value and id_type = :id_type")
         result = await session.execute(
@@ -45,6 +48,7 @@ class GetBeneficiaryIdTool(BaseTool):
 
         return int(partner_id) if partner_id else None
 
+    @time_it("GetBeneficiaryIdTool.get_beneficiary_id")
     async def get_beneficiary_id(self, partner_id: int, program_id: int, session: AsyncSession) -> int:
         if partner_id:
             stmt = text(
@@ -58,6 +62,7 @@ class GetBeneficiaryIdTool(BaseTool):
 
         return None
 
+    @time_it("GetBeneficiaryIdTool.get_id_type_id")
     async def get_id_type_id(self, session: AsyncSession):
         if not self._id_type_id:
             stmt = text("SELECT id from g2p_id_type where name = :name")

@@ -7,6 +7,7 @@ from openg2p_fastapi_common.service import BaseService
 
 from ..config import OllamaOptions, Settings
 from ..schemas.ollama import OllamaChatRequest, OllamaChatResponse
+from ..utils.timing import time_it
 
 _config = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -42,6 +43,7 @@ class OllamaClientService(BaseService):
     async def aclose(self):
         await self.httpx_client.aclose()
 
+    @time_it("OllamaClientService.load_model")
     async def load_model(self):
         res = await self.httpx_client.post(
             f"{self.url}/api/chat",
@@ -55,6 +57,7 @@ class OllamaClientService(BaseService):
         res.raise_for_status()
         return res.json()
 
+    @time_it("OllamaClientService.unload_model")
     async def unload_model(self):
         res = await self.httpx_client.post(
             f"{self.url}/api/chat",
@@ -68,6 +71,7 @@ class OllamaClientService(BaseService):
         res.raise_for_status()
         return res.json()
 
+    @time_it("OllamaClientService.chat")
     async def chat(self, request: OllamaChatRequest) -> OllamaChatResponse:
         """
         Low level Ollama Chat API call.

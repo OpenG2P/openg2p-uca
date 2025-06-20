@@ -2,6 +2,7 @@ import logging
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -15,6 +16,7 @@ _logger = logging.getLogger(_config.logging_default_logger_name)
 class ProgramInfoTool(BaseTool):
     """Retrieves information about all the programs."""
 
+    @time_it("ProgramInfoTool.call_tool")
     async def call_tool(
         self, request: ProgramToolRequest, agent=None, messages=None, **kw
     ) -> ProgramToolResponse:
