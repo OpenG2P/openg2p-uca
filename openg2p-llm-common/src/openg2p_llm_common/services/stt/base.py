@@ -3,6 +3,7 @@ import logging
 from openg2p_fastapi_common.service import BaseService
 
 from ...config import Settings
+from ...utils.timing import time_it
 
 _config: Settings = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -54,6 +55,7 @@ class BaseSTTService(BaseService):
         To be implemented by STT impl."""
         raise NotImplementedError()
 
+    @time_it("BaseSTTService.convert_audio_to_text")
     def convert_audio_to_text(self, audio: bytes, **kw) -> str:
         """Converts audio to text and returns string. This is a convenience function that
         wraps all the steps of the stt_service into one function and returns the final

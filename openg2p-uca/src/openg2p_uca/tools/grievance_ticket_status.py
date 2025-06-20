@@ -2,6 +2,7 @@ import logging
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -30,10 +31,12 @@ class GetGrievanceTicketStatusTool(BaseTool):
         self.stage_to_status_mapping: dict[str, str] = {
             "new": "Created",
             "in progress": "Assigned. Work in Progress",
+            "waiting": "Waiting for confirmation",
             "done": "Resolved",
             "cancelled": "Closed without finishing",
         }
 
+    @time_it("GetGrievanceTicketStatusTool.call_tool")
     async def call_tool(
         self, request: GetGrievanceTicketStatusToolRequest, agent=None, messages=None, **kw
     ) -> GetGrievanceTicketStatusToolResponse:
@@ -46,7 +49,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
                         number as ticket_number,
                         stage_id,
                         resolution_message as ticket_resolution_message,
-                        resolution_time as ticket_resolution_message
+                        resolution_time as ticket_resolution_time
                     FROM support_ticket
                     WHERE beneficiary_id = :beneficiary_id
                     AND program_id = :program_id
@@ -86,6 +89,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
                 _logger.exception("Failed to retrieve grievance ticket status")
                 return GetGrievanceTicketStatusToolResponse(tickets=[])
 
+    @time_it("GetGrievanceTicketStatusTool.get_stage_name")
     async def get_stage_name(self, stage_id: int, session: AsyncSession) -> str:
         if stage_id not in self._stage_name_cache:
             stmt = text("SELECT name ->> :lang from support_stage where id = :stage_id")
