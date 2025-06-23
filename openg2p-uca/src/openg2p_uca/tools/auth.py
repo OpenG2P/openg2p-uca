@@ -26,7 +26,7 @@ class ValidateOtpToolRequest(ToolBaseRequest):
 
 class ValidateOtpToolResponse(ToolBaseResponse):
     authentication_status: str
-    user_id: str | None = None
+    authenticated_user_id: str | None = None
 
 
 class PerformAuthenticationStepOneSendOtpTool(BaseTool):
@@ -58,7 +58,7 @@ class PerformAuthenticationStepTwoValidateOtpTool(BaseTool):
     This tool can perform step two of authentication, which is to validate the OTP,
     if authentication is not already successful.
     This can only be called if step one is completed.
-    Returns user_id only if authentication successful.
+    Returns authenticated_user_id only if authentication successful.
     The user is NOT aware of authentication_session_id.
     """
 
@@ -80,5 +80,5 @@ class PerformAuthenticationStepTwoValidateOtpTool(BaseTool):
             return ValidateOtpToolResponse(authentication_status="Failed. OTP doesn't match")
         else:
             return ValidateOtpToolResponse(
-                user_id=cred.user_id, authentication_status="Successful. OTP matched."
+                authenticated_user_id=cred.user_id, authentication_status="Successful. OTP matched."
             )

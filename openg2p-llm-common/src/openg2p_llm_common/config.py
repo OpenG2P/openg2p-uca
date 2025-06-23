@@ -9,7 +9,7 @@ from . import __version__
 
 class OllamaOptions(BaseModel):
     model_config = ConfigDict(extra="allow")
-    temperature: int = 0
+    temperature: float = 0
 
 
 class Settings(BaseSettings):
@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     chat_store_es_timeout_secs: int = 10
     chat_store_messages_es_index: str = "llm_messages"
     chat_store_threads_es_index: str = "llm_threads"
+    
+    enable_performance_timing: bool = False
 
     stt_supported_sample_rate: float = 16000
     stt_vosk_model_name: str = "vosk-model-en-us-0.22"

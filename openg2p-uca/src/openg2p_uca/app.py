@@ -54,13 +54,13 @@ class Initializer(BaseInitializer):
 
             ParlerTTSService(enabled=_config.tts_parler_enabled)
 
-        ChangeAgentTool()
-        PerformAuthenticationStepOneSendOtpTool()
-        PerformAuthenticationStepTwoValidateOtpTool()
+        # ChangeAgentTool()
+        # PerformAuthenticationStepOneSendOtpTool()
+        # PerformAuthenticationStepTwoValidateOtpTool()
         ProgramInfoTool()
-        GetBeneficiaryIdTool()
-        CreateGrievanceTicketTool()
-        GetGrievanceTicketStatusTool()
+        # GetBeneficiaryIdTool()
+        # CreateGrievanceTicketTool()
+        # GetGrievanceTicketStatusTool()
         ToolboxService()
         if _config.main_agent_enabled:
             MainAgent(enabled=_config.main_agent_enabled)

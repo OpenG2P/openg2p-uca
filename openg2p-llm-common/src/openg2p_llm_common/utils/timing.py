@@ -39,7 +39,8 @@ def time_it(func_name: str | None = None) -> Callable:
                 return result
             finally:
                 duration = time.perf_counter() - start
-                _logger.info(f"{func_name or func.__name__} took {duration:.3f}s")
+                if _config.enable_performance_timing:
+                    _logger.info(f"{func_name or func.__name__} took {duration:.3f}s")
 
         @functools.wraps(func)
         def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -49,7 +50,8 @@ def time_it(func_name: str | None = None) -> Callable:
                 return result
             finally:
                 duration = time.perf_counter() - start
-                _logger.info(f"{func_name or func.__name__} took {duration:.3f}s")
+                if _config.enable_performance_timing:
+                    _logger.info(f"{func_name or func.__name__} took {duration:.3f}s")
 
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
