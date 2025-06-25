@@ -7,19 +7,16 @@ from uuid import uuid4
 
 from fastapi import Cookie, Depends, Response, UploadFile
 from fastapi.responses import ORJSONResponse
-from openg2p_fastapi_auth.controllers.auth_controller import AuthController
-from openg2p_fastapi_auth.dependencies import JwtBearerAuth
-from openg2p_fastapi_auth.models.credentials import AuthCredentials
-from openg2p_fastapi_auth.models.profile import BasicProfile
 from openg2p_fastapi_common.controller import BaseController
 from openg2p_llm_common.errors import MessageIdInvalid, STTUnsupportedAudioFormat, ThreadIdInvalid
 from openg2p_llm_common.services.agents import BaseAgentSystem
-from openg2p_llm_common.services.chat_store import ChatStoreService
 from openg2p_llm_common.services.stt.base import BaseSTTService
 from openg2p_llm_common.services.tts.base import BaseTTSService
+from openg2p_llm_common.utils.timing import time_it
 
+from ..auth_dep import UcaSessionAuth
 from ..config import Settings
-from ..errors import AuthMissingUserId
+from ..schemas.auth import UcaAuthCredentials
 from ..schemas.chat import (
     UcaChatMessageRequest,
     UcaChatMessageResponse,
@@ -30,6 +27,7 @@ from ..schemas.chat import (
     UcaChatThreadResponse,
     UcaChatThreadsResponse,
 )
+from .auth import AuthController
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -98,7 +96,6 @@ class ChatController(BaseController):
         )
 
         self._agent_system: BaseAgentSystem = None
-        self._chat_store: ChatStoreService = None
         self._auth_controller: AuthController = None
         self._stt_service: BaseSTTService = None
         self._tts_service: BaseTTSService = None
@@ -108,12 +105,6 @@ class ChatController(BaseController):
         if not self._agent_system:
             self._agent_system = BaseAgentSystem.get_component()
         return self._agent_system
-
-    @property
-    def chat_store_service(self):
-        if not self._chat_store:
-            self._chat_store = ChatStoreService.get_component()
-        return self._chat_store
 
     @property
     def auth_controller(self):
@@ -133,27 +124,35 @@ class ChatController(BaseController):
             self._tts_service = BaseTTSService.get_component()
         return self._tts_service
 
-    async def post_new_chat_thread(self, auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())]):
+    async def post_new_chat_thread(self, auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())]):
         """
         Initiate new chat threads. Returns new thread_id in cookie
         and the AI greeting message in response body.
         """
         new_thread_id = str(uuid4())
-        user_profile = await self.auth_controller.get_profile(auth, online=True)
-        user_id = self.get_user_id(user_profile)
+        user_profile = auth.user_profile
+        user_profile["user_id"] = auth.user_id
 
-        res_thread = await self.agent_system.initialize_chat_thread(
-            new_thread_id, user_id, user_profile=user_profile.model_dump(mode="json")
-        )
-        res_msg = await self.agent_system.chat_and_store_by_user(new_thread_id, None, user_id)
+        res_thread = await self.agent_system.initialize_chat_thread(new_thread_id, user_profile=user_profile)
+        if _config.greeting_message_on_chat:
+            res_msg = await self.agent_system.chat_and_store(new_thread_id, None, user_id=auth.user_id)
+            message = self.filter_message(res_msg.message)
+            message_id = res_msg.id
+            message_by = res_msg.message_by
+            message_sent_at = res_msg.sent_at
+        else:
+            message = ""
+            message_id = ""
+            message_by = "assistant"
+            message_sent_at = datetime.now(timezone.utc)
         response = ORJSONResponse(
             content=UcaChatThreadCreateResponse(
                 thread_id=res_thread.id,
                 thread_created_at=res_thread.created_at,
-                message=self.filter_message(res_msg.message),
-                message_id=res_msg.id,
-                message_by=res_msg.message_by,
-                message_sent_at=res_msg.sent_at,
+                message=message,
+                message_id=message_id,
+                message_by=message_by,
+                message_sent_at=message_sent_at,
             ).model_dump(mode="json")
         )
         cookie_expires = None
@@ -173,7 +172,7 @@ class ChatController(BaseController):
     async def put_change_chat_thread(
         self,
         thread: UcaChatThreadRequest,
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
         response: Response,
     ):
         """
@@ -182,8 +181,9 @@ class ChatController(BaseController):
         if not thread.thread_id:
             response.delete_cookie(_config.thread_id_cookie_name)
         else:
-            user_id = self.get_user_id(auth)
-            res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread.thread_id)
+            res = await self.agent_system.get_chat_store().get_threads(
+                user_id=auth.user_id, thread_id=thread.thread_id
+            )
             if len(res.threads) < 1:
                 # Raise error if thread_id doesn't exists against give user_id.
                 raise ThreadIdInvalid()
@@ -204,13 +204,12 @@ class ChatController(BaseController):
     async def get_current_chat_thread(
         self,
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
     ):
         """
         Get the current thread_id of logged in user.
         """
-        user_id = self.get_user_id(auth)
-        res = await self.chat_store_service.get_threads(user_id=user_id, thread_id=thread_id)
+        res = await self.agent_system.get_chat_store().get_threads(user_id=auth.user_id, thread_id=thread_id)
         if len(res.threads) < 1:
             # Raise error if thread_id doesn't exists against give user_id.
             raise ThreadIdInvalid()
@@ -219,7 +218,7 @@ class ChatController(BaseController):
 
     async def get_chat_threads(
         self,
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
         page: int = 0,
         limit: int = 100,
         sort: Literal["asc", "desc"] = "desc",
@@ -228,8 +227,9 @@ class ChatController(BaseController):
         Get all threads of the logged in user,
         based on limit and page number and sort order.
         """
-        user_id = self.get_user_id(auth)
-        res = await self.chat_store_service.get_threads(user_id=user_id, page=page, limit=limit, sort=sort)
+        res = await self.agent_system.get_chat_store().get_threads(
+            user_id=auth.user_id, page=page, limit=limit, sort=sort
+        )
         return UcaChatThreadsResponse(
             threads=[
                 UcaChatThreadResponse(thread_id=thread.id, created_at=thread.created_at)
@@ -241,15 +241,13 @@ class ChatController(BaseController):
         self,
         message: UcaChatMessageRequest,
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
     ):
         """
         Posts new message, from request body, into the thread_id given in cookie.
         Returns AI's response in body.
         """
-        res = await self.agent_system.chat_and_store_by_user(
-            thread_id, message.message, self.get_user_id(auth)
-        )
+        res = await self.agent_system.chat_and_store(thread_id, message.message, user_id=auth.user_id)
         return UcaChatMessageResponse(
             message=self.filter_message(res.message),
             message_id=res.id,
@@ -260,7 +258,7 @@ class ChatController(BaseController):
     async def get_chat_messages(
         self,
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
         page: int = 0,
         limit: int = 100,
         sort: Literal["asc", "desc"] = "desc",
@@ -269,10 +267,9 @@ class ChatController(BaseController):
         Get all messages of the given thread,
         based on limit and page number and sort order.
         """
-        user_id = self.get_user_id(auth)
-        res = await self.chat_store_service.get_messages(
+        res = await self.agent_system.get_chat_store().get_messages(
             thread_id=thread_id,
-            user_id=user_id,
+            user_id=auth.user_id,
             message_by=["assistant", "user"],
             page=page,
             limit=limit,
@@ -291,11 +288,12 @@ class ChatController(BaseController):
             ]
         )
 
+    @time_it("ChatController.post_new_voice_message")
     async def post_new_voice_message(
         self,
         audio: UploadFile,
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
     ):
         """
         Posts new voice message, from request body, into the thread_id given in cookie.
@@ -306,15 +304,15 @@ class ChatController(BaseController):
         text_msg = self.stt_service.convert_audio_to_text(await audio.read())
         return await self.post_new_chat_message(UcaChatMessageRequest(message=text_msg), thread_id, auth)
 
+    @time_it("ChatController.post_speak_message")
     async def post_speak_message(
         self,
         request: UcaChatSpeakMessageRequest,
         thread_id: Annotated[str, Cookie(alias=_config.thread_id_cookie_name)],
-        auth: Annotated[AuthCredentials, Depends(JwtBearerAuth())],
+        auth: Annotated[UcaAuthCredentials, Depends(UcaSessionAuth())],
     ):
-        user_id = self.get_user_id(auth)
-        message = await self.chat_store_service.get_messages(
-            user_id=user_id, message_id=request.message_id, thread_id=thread_id
+        message = await self.agent_system.get_chat_store().get_messages(
+            user_id=auth.user_id, message_id=request.message_id, thread_id=thread_id
         )
         if len(message.messages) < 1:
             raise MessageIdInvalid()
@@ -336,11 +334,3 @@ class ChatController(BaseController):
                 if strip:
                     message = message.strip()
         return message
-
-    def get_user_id(self, auth: AuthCredentials | BasicProfile):
-        if not auth and _config.auth_dummy_user_data:
-            return _config.auth_dummy_user_data[_config.user_id_key_in_auth]
-        try:
-            return getattr(auth, _config.user_id_key_in_auth)
-        except Exception as e:
-            raise AuthMissingUserId() from e

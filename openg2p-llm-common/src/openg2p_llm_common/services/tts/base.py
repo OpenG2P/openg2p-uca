@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     import av
 
 from ...config import Settings
+from ...utils.timing import time_it
 
 _config: Settings = Settings.get_config(strict=False)
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -54,6 +55,7 @@ class BaseTTSService(BaseService):
         To be implemented by TTS impl."""
         raise NotImplementedError()
 
+    @time_it("BaseTTSService.convert_text_to_audio")
     def convert_text_to_audio(self, text: str, audio: BinaryIO):
         """Converts text to audio and writes the given file-like object. This is a convenience
         function that wraps all the steps of the tts_service into one function.

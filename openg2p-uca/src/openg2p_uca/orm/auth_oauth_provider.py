@@ -48,6 +48,8 @@ class AuthOauthProviderORM(BaseORMModel):
     g2p_portal_oauth_callback_url: Mapped[Optional[str]] = mapped_column()
     g2p_uca_portal_allowed: Mapped[Optional[bool]] = mapped_column()
 
+    g2p_id_type: Mapped[Optional[int]] = mapped_column()
+
     @classmethod
     async def get_by_id(cls, id: int, active=True) -> "AuthOauthProviderORM":
         result = None

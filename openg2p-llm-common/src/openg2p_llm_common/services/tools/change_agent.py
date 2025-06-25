@@ -2,6 +2,7 @@ from openg2p_fastapi_common.utils.holder import Holder
 
 from ...schemas.tools import ToolBaseRequest, ToolBaseResponse
 from ...services.agents import BaseAgent, BaseAgentSystem
+from ...utils.timing import time_it
 from .base import BaseTool
 
 
@@ -28,6 +29,7 @@ class ChangeAgentTool(BaseTool):
             self._agent_system = BaseAgentSystem.get_component()
         return self._agent_system
 
+    @time_it("ChangeAgentTool.call_tool")
     async def call_tool(
         self, request: ChangeAgentToolRequest, agent: Holder[BaseAgent], messages=None
     ) -> ChangeAgentToolResponse:

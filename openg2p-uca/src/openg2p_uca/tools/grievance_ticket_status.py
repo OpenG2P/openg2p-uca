@@ -2,6 +2,7 @@ import logging
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -20,6 +21,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
     """
     Retrieves the status of grievance tickets for a specific beneficiary and program.
     Call the GetBeneficiaryIdTool to get the beneficiary ID.
+    User Authentication required to be Successful.
     Returns ticket details including status, resolution message, and resolution time.
     """
 
@@ -29,10 +31,12 @@ class GetGrievanceTicketStatusTool(BaseTool):
         self.stage_to_status_mapping: dict[str, str] = {
             "new": "Created",
             "in progress": "Assigned. Work in Progress",
+            "waiting": "Waiting for confirmation",
             "done": "Resolved",
             "cancelled": "Closed without finishing",
         }
 
+    @time_it("GetGrievanceTicketStatusTool.call_tool")
     async def call_tool(
         self, request: GetGrievanceTicketStatusToolRequest, agent=None, messages=None, **kw
     ) -> GetGrievanceTicketStatusToolResponse:
@@ -45,11 +49,11 @@ class GetGrievanceTicketStatusTool(BaseTool):
                         number as ticket_number,
                         stage_id,
                         resolution_message as ticket_resolution_message,
-                        resolution_time as ticket_resolution_message
+                        resolution_time as ticket_resolution_time
                     FROM support_ticket
                     WHERE beneficiary_id = :beneficiary_id
                     AND program_id = :program_id
-                    AND active = true
+                    AND active = :active
                     ORDER BY create_date DESC
                     """
                 )
@@ -59,26 +63,24 @@ class GetGrievanceTicketStatusTool(BaseTool):
                     {
                         "beneficiary_id": request.beneficiary_id,
                         "program_id": request.program_id,
+                        "active": True,
                     },
                 )
 
-                tickets_data = result.all()
+                tickets_data = [res._asdict() for res in result.all()]
 
                 if not tickets_data:
                     return GetGrievanceTicketStatusToolResponse(tickets=[])
 
                 tickets = []
                 for ticket_row in tickets_data:
-                    stage_name = await self.get_stage_name(ticket_row.stage_id, session)
-                    ticket_status = self.get_stage_to_status_mapping(stage_name)
+                    stage_name = await self.get_stage_name(ticket_row.pop("stage_id"), session)
+                    ticket_row["ticket_status"] = self.get_stage_to_status_mapping(stage_name)
 
-                    ticket_info = TicketInfo(
-                        ticket_number=ticket_row.ticket_number,
-                        ticket_status=ticket_status,
-                    )
-                    if ticket_info.ticket_status == "Resolved":
-                        ticket_info.ticket_resolution_message = ticket_row.resolution_message
-                        ticket_info.ticket_resolution_time = ticket_row.resolution_time
+                    ticket_info = TicketInfo.model_validate(ticket_row)
+                    if ticket_info.ticket_status != "Resolved":
+                        ticket_info.ticket_resolution_message = None
+                        ticket_info.ticket_resolution_time = None
                     tickets.append(ticket_info)
 
                 return GetGrievanceTicketStatusToolResponse(tickets=tickets)
@@ -87,6 +89,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
                 _logger.exception("Failed to retrieve grievance ticket status")
                 return GetGrievanceTicketStatusToolResponse(tickets=[])
 
+    @time_it("GetGrievanceTicketStatusTool.get_stage_name")
     async def get_stage_name(self, stage_id: int, session: AsyncSession) -> str:
         if stage_id not in self._stage_name_cache:
             stmt = text("SELECT name ->> :lang from support_stage where id = :stage_id")

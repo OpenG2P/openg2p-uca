@@ -3,6 +3,7 @@ import fractions
 import functools
 import io
 import logging
+import uuid
 from datetime import datetime, timezone
 
 import av
@@ -14,15 +15,16 @@ from aiortc import (
     RTCPeerConnection,
     RTCSessionDescription,
 )
-from fastapi import WebSocket, WebSocketDisconnect
 from openg2p_fastapi_common.controller import BaseController
 from openg2p_llm_common.errors import STTUnsupportedAudioFormat
 from openg2p_llm_common.schemas.ollama import OllamaChatMessage, OllamaChatResponse
 from openg2p_llm_common.services.agents import BaseAgentSystem
 from openg2p_llm_common.services.stt.base import BaseSTTRequest, BaseSTTService
 from openg2p_llm_common.services.tts.base import BaseTTSService
+from openg2p_llm_common.utils.timing import time_it
 
 from ..config import Settings
+from ..schemas.call import UcaCallMetaResponse, UcaCallOfferRequest, UcaCallOfferResponse
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -52,16 +54,16 @@ class UcaQueueAudioTrack(AudioStreamTrack):
 class UcaCallRTCPeerConnection(RTCPeerConnection):
     def __init__(
         self,
-        websocket: WebSocket | None = None,
-        configuration: RTCConfiguration | None = None,
+        id: str | None = None,
         messages: list[OllamaChatMessage] | None = None,
         output_audio_track: UcaQueueAudioTrack | None = None,
+        configuration: RTCConfiguration | None = None,
         **kw
     ) -> None:
         if configuration and not kw.get("configuration"):
             kw["configuration"] = configuration
         super().__init__(**kw)
-        self.websocket = websocket
+        self.id = id or str(uuid.uuid4())
         self.messages = messages
         self.output_audio_track = output_audio_track
         self.input_audio_track: AudioStreamTrack = None
@@ -81,6 +83,10 @@ class CallController(BaseController):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
+        self.rtc_peer_connections: dict[
+            str, UcaCallRTCPeerConnection
+        ] = {}  # TODO: Move this to better system
+
         self.agent_system: BaseAgentSystem = None
         self.stt_service: BaseSTTService = None
         self.tts_service: BaseTTSService = None
@@ -89,10 +95,21 @@ class CallController(BaseController):
         self.call_standby_message_audio: av.AudioFrame = None
         self.resampler: av.AudioResampler = None
 
-        self.router.tags += ["chat"]
-        self.router.add_websocket_route(
-            "/call",
-            self.websocket_call,
+        self.meta_response: UcaCallMetaResponse = None
+
+        self.router.prefix += "/call"
+        self.router.tags += ["call"]
+        self.router.add_api_route(
+            "/meta",
+            self.get_call_meta,
+            responses={200: {"model": UcaCallMetaResponse}},
+            methods=["GET"],
+        )
+        self.router.add_api_route(
+            "/offer",
+            self.post_new_call_offer,
+            responses={200: {"model": UcaCallOfferResponse}},
+            methods=["POST"],
         )
 
     async def initialize(self):
@@ -104,79 +121,63 @@ class CallController(BaseController):
         self.stt_service = BaseSTTService.get_component()
         self.tts_service = BaseTTSService.get_component()
 
+        self.meta_response = UcaCallMetaResponse(iceServers=_config.call_meta_ice_servers or [])
+
         with open(_config.default_system_prompt_suffix_for_call_path) as file:
             self.system_prompt_call_suffix = file.read().strip()
 
         with open(_config.call_standby_message_path) as file:
             self.call_standby_message_text = file.read().strip()
-        self.call_standby_message_audio = self.tts_service.generate_audio_frame_from_raw_audio(
-            self.tts_service.convert_text_to_raw_audio(self.call_standby_message_text)
-        )
+        if self.tts_service:
+            self.call_standby_message_audio = self.tts_service.generate_audio_frame_from_raw_audio(
+                self.tts_service.convert_text_to_raw_audio(self.call_standby_message_text)
+            )
 
-    async def websocket_call(self, websocket: WebSocket):
-        await websocket.accept()
-        _logger.info("Call WebSocket: Accepted.")
+    async def get_call_meta(self):
+        return self.meta_response
 
+    async def post_new_call_offer(self, request: UcaCallOfferRequest):
+        pc = self.rtc_call_create_new_connection()
         server_audio_track = UcaQueueAudioTrack()
-        pc = UcaCallRTCPeerConnection(
-            websocket=websocket,
-            output_audio_track=server_audio_track,
-        )
+        pc.output_audio_track = server_audio_track
         pc.addTrack(server_audio_track)
         pc.add_listener("track", functools.partial(self.rtc_call_on_track, pc))
         pc.add_listener(
             "connectionstatechange", functools.partial(self.rtc_call_on_connectionstatechange, pc)
         )
 
-        try:
-            while True:
-                # This receive_json breaks when the websocket is closed from the client.
-                # Which will then result in rtcpeerconnection closure.
-                data = await websocket.receive_json()
-                if data["type"] == "offer":
-                    _logger.info("Call WebSocket: Received SDP offer.")
-                    offer = RTCSessionDescription(sdp=data["sdp"], type=data["sdp_type"])
-                    await pc.setRemoteDescription(offer)
+        offer = RTCSessionDescription(sdp=request.sdp, type=request.sdp_type)
+        await pc.setRemoteDescription(offer)
 
-                    answer = await pc.createAnswer()
-                    await pc.setLocalDescription(answer)
-                    _logger.info("Call WebSocket: Sending SDP answer.")
-                    await websocket.send_json(
-                        {"type": pc.localDescription.type, "sdp": pc.localDescription.sdp}
-                    )
-                elif data["type"] == "ping":
-                    _logger.info("Call WebSocket: Ping received")
-                    await websocket.send_json({"type": "pong"})
-                elif data["type"] == "pong":
-                    _logger.info("Call WebSocket: Pong received")
-                    await websocket.send_json({"type": "ping"})
-                else:
-                    _logger.warning("Call WebSocket: Unknown message type - %s", data["type"])
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        _logger.info("Call Creation: Sending SDP answer.")
+        return UcaCallOfferResponse(type="answer", sdp=pc.localDescription.sdp)
 
-        except WebSocketDisconnect:
-            _logger.info("Call WebSocket: Disconnected.")
-        except Exception:
-            _logger.exception("Call WebSocket: Unknown error occured")
-        finally:
-            if pc and pc.connectionState != "closed":
-                await pc.close()
-            _logger.info("Call WebSocket: Terminated. RTC peer connection also closed.")
+    def rtc_call_create_new_connection(self, **kw) -> UcaCallRTCPeerConnection:
+        pc = UcaCallRTCPeerConnection(**kw)
+        self.rtc_peer_connections[pc.id] = pc
+        return pc
+
+    async def rtc_call_close_connection(self, rtc_conn: UcaCallRTCPeerConnection, **kw):
+        if rtc_conn and rtc_conn.connectionState != "closed":
+            await rtc_conn.close(**kw)
+        _logger.info("Call Termination: RTC peer connection closed.")
+        self.rtc_peer_connections.pop(rtc_conn.id)
 
     async def rtc_call_on_connectionstatechange(self, rtc_conn: UcaCallRTCPeerConnection):
-        _logger.info("Call WebSocket: RTC connection state is %s", rtc_conn.connectionState)
+        _logger.info("Call State Change: RTC connection state is %s", rtc_conn.connectionState)
         if rtc_conn.connectionState == "connected":
             self.rtc_call_create_thread(rtc_conn)
         if rtc_conn.connectionState in ["failed", "closed"]:
             try:
-                await rtc_conn.websocket.close()
+                await self.rtc_call_close_connection(rtc_conn)
             except Exception:
-                _logger.exception(
-                    "Call WebSocket: Unable to send websocket close. Mostly websocket already closed."
-                )
+                _logger.exception("Call State Change: Unable to close RTC conn. Maybe already closed.")
 
     async def rtc_call_on_track(self, rtc_conn: UcaCallRTCPeerConnection, track: MediaStreamTrack):
         _logger.info(
-            "Call WebSocket: Track, id - %s, kind - %s received from remote peer.", track.id, track.kind
+            "Call On Track: Track received from remote peer. Id - %s. Kind - %s", track.id, track.kind
         )
         if track.kind == "audio":
             rtc_conn.input_audio_track = track
@@ -185,9 +186,10 @@ class CallController(BaseController):
                 try:
                     await self.rtc_call_process_audio(rtc_conn, track, stt_request)
                 except Exception:
-                    _logger.exception("Call WebSocket: Process Audio failed.")
+                    _logger.exception("Call On Track: Process Audio failed.")
                     break
 
+    @time_it("CallController.rtc_call_process_audio")
     async def rtc_call_process_audio(
         self, rtc_conn: UcaCallRTCPeerConnection, track: MediaStreamTrack, stt_request: BaseSTTRequest
     ):
@@ -223,7 +225,11 @@ class CallController(BaseController):
         done_async_tasks, pending_async_tasks = await asyncio.wait(
             [task, timer_task], return_when=asyncio.FIRST_COMPLETED
         )
-        if task in pending_async_tasks and timer_task in done_async_tasks:
+        if (
+            task in pending_async_tasks
+            and timer_task in done_async_tasks
+            and self.call_standby_message_audio is not None
+        ):
             # LLM Response taking longer than standby timer.
             # So respond with standby message
             await rtc_conn.add_output_audio_frames(self.call_standby_message_audio)
@@ -236,6 +242,7 @@ class CallController(BaseController):
         rtc_conn.messages = [OllamaChatMessage(role="system", content=stored_system_prompt)]
         asyncio.create_task(self.llm_chat_speak(rtc_conn, **kw))
 
+    @time_it("CallController.llm_chat")
     async def llm_chat(
         self, rtc_conn: UcaCallRTCPeerConnection, message_sent_at: datetime | None = None, **kw
     ) -> str:
@@ -251,6 +258,7 @@ class CallController(BaseController):
                     rtc_conn.messages.append(msg)
         return rtc_conn.messages[-1].content
 
+    @time_it("CallController.llm_chat_speak")
     async def llm_chat_speak(
         self, rtc_conn: UcaCallRTCPeerConnection, message_sent_at: datetime | None = None, **kw
     ):

@@ -9,6 +9,7 @@ from ...config import Settings
 from ...errors import ToolNotFound
 from ...schemas.ollama import OllamaChatMessage
 from ...schemas.tools import ToolBaseResponse
+from ...utils.timing import time_it
 from .base import BaseTool
 
 if TYPE_CHECKING:
@@ -68,6 +69,7 @@ class ToolboxService(BaseService):
             },
         }
 
+    @time_it("ToolboxService.call_each_tool_from_ollama")
     async def call_each_tool_from_ollama(
         self,
         tool_call: dict[str, Any],
@@ -90,6 +92,7 @@ class ToolboxService(BaseService):
         res.tool_name = tool_name
         return res
 
+    @time_it("ToolboxService.call_tools_from_ollama")
     async def call_tools_from_ollama(
         self,
         tool_calls: list[dict[str, Any]],
