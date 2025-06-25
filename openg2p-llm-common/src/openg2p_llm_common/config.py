@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     chat_store_messages_es_index: str = "llm_messages"
     chat_store_threads_es_index: str = "llm_threads"
 
+    enable_time_it_log: bool = False
+
     stt_supported_sample_rate: float = 16000
     stt_vosk_model_name: str = "vosk-model-en-us-0.22"
     stt_vosk_model_directory: str = "./models"

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -29,6 +30,7 @@ class CreateGrievanceTicketTool(BaseTool):
         super().__init__(**kw)
         self._stage_id: int = None
 
+    @time_it("CreateGrievanceTicketTool.call_tool")
     async def call_tool(
         self, request: CreateGrievanceTicketToolRequest, agent=None, messages=None, **kw
     ) -> CreateGrievanceTicketToolResponse:
@@ -95,6 +97,7 @@ class CreateGrievanceTicketTool(BaseTool):
                     ticket_creation_message="Failed to create grievance ticket.",
                 )
 
+    @time_it("CreateGrievanceTicketTool.get_stage_id")
     async def get_stage_id(self, session: AsyncSession) -> int:
         if not self._stage_id:
             stmt = text("SELECT id from support_stage where name ->> :lang = :name")

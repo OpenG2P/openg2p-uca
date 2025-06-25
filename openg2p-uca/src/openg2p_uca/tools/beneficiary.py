@@ -2,6 +2,7 @@ import logging
 
 from openg2p_fastapi_common.context import dbengine
 from openg2p_llm_common.services.tools.base import BaseTool
+from openg2p_llm_common.utils.timing import time_it
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -29,6 +30,7 @@ class GetBeneficiaryIdTool(BaseTool):
             self._auth_controller = AuthController.get_component()
         return self._auth_controller
 
+    @time_it("GetBeneficiaryIdTool.call_tool")
     async def call_tool(
         self, request: GetBeneficiaryIdToolRequest, agent=None, messages=None, **kw
     ) -> GetBeneficiaryIdToolResponse:
@@ -46,6 +48,7 @@ class GetBeneficiaryIdTool(BaseTool):
                 ben.beneficiary_status = "applied"
             return ben
 
+    @time_it("GetBeneficiaryIdTool.get_beneficiary_id")
     async def get_beneficiary_id(self, partner_id: int, program_id: int, session: AsyncSession) -> int:
         if partner_id:
             stmt = text(
