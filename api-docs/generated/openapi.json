@@ -79,24 +79,8 @@
           "auth"
         ],
         "summary": "Get Profile",
+        "description": "Get Profile Data of the authenticated user/entity.\nThis can also be used to check whether or not the Authentication is present and valid.",
         "operationId": "get_profile_auth_profile_get",
-        "security": [
-          {
-            "JwtBearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "online",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": true,
-              "title": "Online"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -109,56 +93,51 @@
             }
           },
           "401": {
+            "description": "Unauthorized",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorListResponse"
                 }
               }
-            },
-            "description": "Unauthorized"
+            }
           },
           "403": {
+            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorListResponse"
                 }
               }
-            },
-            "description": "Forbidden"
+            }
           },
           "404": {
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorListResponse"
                 }
               }
-            },
-            "description": "Not Found"
+            }
           },
           "500": {
+            "description": "Internal Server Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorListResponse"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "UcaSessionAuth": []
+          }
+        ]
       }
     },
     "/auth/logout": {
@@ -373,20 +352,31 @@
         }
       }
     },
-    "/oauth2/callback": {
-      "get": {
+    "/auth/send_otp": {
+      "post": {
         "tags": [
-          "oauth"
+          "auth"
         ],
-        "summary": "Oauth Callback",
-        "description": "Oauth2 Redirect Url. Auth Server will redirect to this URL after the Authentication is successful.\n\nInternal Errors:\n- Code: G2P-AUT-401. HTTP: 401. Message: Login Provider Id not received.",
-        "operationId": "oauth_callback_oauth2_callback_get",
+        "summary": "Post Send Otp",
+        "operationId": "post_send_otp_auth_send_otp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaAuthSendOtpRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UcaAuthSendOtpResponse"
+                }
               }
             }
           },
@@ -429,6 +419,176 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/authenticate_otp": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Post Authenticate Otp",
+        "operationId": "post_authenticate_otp_auth_authenticate_otp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaAuthAuthenticateOtpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaAuthAuthenticateOtpResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oauth2/callback": {
+      "get": {
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Oauth Callback",
+        "operationId": "oauth_callback_oauth2_callback_get",
+        "parameters": [
+          {
+            "name": "kw",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "title": "Kw"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -443,7 +603,7 @@
         "operationId": "post_new_chat_thread_chat_thread_post",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "responses": {
@@ -508,7 +668,7 @@
         "operationId": "put_change_chat_thread_chat_thread_put",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "requestBody": {
@@ -591,7 +751,7 @@
         "operationId": "get_current_chat_thread_chat_thread_get",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -679,7 +839,7 @@
         "operationId": "get_chat_threads_chat_threads_get",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -792,7 +952,7 @@
         "operationId": "post_new_chat_message_chat_message_post",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -890,7 +1050,7 @@
         "operationId": "get_chat_messages_chat_messages_get",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -1012,7 +1172,7 @@
         "operationId": "post_new_voice_message_chat_voice_message_post",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -1109,7 +1269,7 @@
         "operationId": "post_speak_message_chat_speak_message_post",
         "security": [
           {
-            "JwtBearerAuth": []
+            "UcaSessionAuth": []
           }
         ],
         "parameters": [
@@ -1179,6 +1339,679 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quick_chat/thread": {
+      "post": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Post New Chat Thread",
+        "description": "Initiate new quick chat. Quick Chat doesnt require auth.\nQuick chat messages are not stored and they are deleted after user is finished.\nReturns new session_id in cookie and the AI greeting message in response body.",
+        "operationId": "post_new_chat_thread_quick_chat_thread_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaChatMessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Get Verify Current Chat Thread",
+        "operationId": "get_verify_current_chat_thread_quick_chat_thread_get",
+        "parameters": [
+          {
+            "name": "qc_session_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Qc Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quick_chat/message": {
+      "post": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Post New Chat Message",
+        "description": "Posts new message into quick chat, from request body.\nReturns AI's response in body.",
+        "operationId": "post_new_chat_message_quick_chat_message_post",
+        "parameters": [
+          {
+            "name": "qc_session_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Qc Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaChatMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaChatMessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quick_chat/messages": {
+      "get": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Get Chat Messages",
+        "description": "Get all messages of the given thread,\nbased on limit and page number and sort order.",
+        "operationId": "get_chat_messages_quick_chat_messages_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "desc",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "qc_session_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Qc Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaChatMessagesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quick_chat/voice_message": {
+      "post": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Post New Voice Message",
+        "description": "Posts new voice message into quick chat, from request body.\nReturns AI's response in body.",
+        "operationId": "post_new_voice_message_quick_chat_voice_message_post",
+        "parameters": [
+          {
+            "name": "qc_session_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Qc Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_new_voice_message_quick_chat_voice_message_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaChatMessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quick_chat/speak_message": {
+      "post": {
+        "tags": [
+          "quick_chat"
+        ],
+        "summary": "Post Speak Message",
+        "operationId": "post_speak_message_quick_chat_speak_message_post",
+        "parameters": [
+          {
+            "name": "qc_session_id",
+            "in": "cookie",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Qc Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaChatSpeakMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "audio/wav": {}
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/call/meta": {
+      "get": {
+        "tags": [
+          "call"
+        ],
+        "summary": "Get Call Meta",
+        "operationId": "get_call_meta_call_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaCallMetaResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/call/offer": {
+      "post": {
+        "tags": [
+          "call"
+        ],
+        "summary": "Post New Call Offer",
+        "operationId": "post_new_call_offer_call_offer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UcaCallOfferRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UcaCallOfferResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorListResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1329,6 +2162,20 @@
         ],
         "title": "Body_post_new_voice_message_chat_voice_message_post"
       },
+      "Body_post_new_voice_message_quick_chat_voice_message_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_post_new_voice_message_quick_chat_voice_message_post"
+      },
       "ErrorListResponse": {
         "properties": {
           "errors": {
@@ -1436,6 +2283,113 @@
           "oauth2_auth_code"
         ],
         "title": "LoginProviderTypes"
+      },
+      "UcaAuthAuthenticateOtpRequest": {
+        "properties": {
+          "otp": {
+            "type": "string",
+            "title": "Otp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "otp"
+        ],
+        "title": "UcaAuthAuthenticateOtpRequest"
+      },
+      "UcaAuthAuthenticateOtpResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "UcaAuthAuthenticateOtpResponse"
+      },
+      "UcaAuthSendOtpRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "UcaAuthSendOtpRequest"
+      },
+      "UcaAuthSendOtpResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "UcaAuthSendOtpResponse"
+      },
+      "UcaCallMetaResponse": {
+        "properties": {
+          "iceServers": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Iceservers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "iceServers"
+        ],
+        "title": "UcaCallMetaResponse"
+      },
+      "UcaCallOfferRequest": {
+        "properties": {
+          "sdp": {
+            "type": "string",
+            "title": "Sdp"
+          },
+          "sdp_type": {
+            "type": "string",
+            "title": "Sdp Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sdp",
+          "sdp_type"
+        ],
+        "title": "UcaCallOfferRequest"
+      },
+      "UcaCallOfferResponse": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "sdp": {
+            "type": "string",
+            "title": "Sdp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "sdp"
+        ],
+        "title": "UcaCallOfferResponse"
       },
       "UcaChatMessageRequest": {
         "properties": {
@@ -1646,9 +2600,9 @@
       }
     },
     "securitySchemes": {
-      "JwtBearerAuth": {
+      "UcaSessionAuth": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "session"
       }
     }
   }
