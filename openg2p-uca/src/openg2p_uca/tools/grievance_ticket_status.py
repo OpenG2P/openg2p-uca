@@ -46,7 +46,7 @@ class GetGrievanceTicketStatusTool(BaseTool):
                         number as ticket_number,
                         stage_id,
                         resolution_message as ticket_resolution_message,
-                        resolution_time as ticket_resolution_message
+                        resolution_time as ticket_resolution_time
                     FROM support_ticket
                     WHERE beneficiary_id = :beneficiary_id
                     AND program_id = :program_id

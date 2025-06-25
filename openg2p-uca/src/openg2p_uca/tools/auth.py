@@ -26,7 +26,7 @@ class ValidateOtpToolRequest(ToolBaseRequest):
 
 class ValidateOtpToolResponse(ToolBaseResponse):
     authentication_status: str
-    user_id: str | None = None
+    authenticated_user_id: str | None = None
 
 
 class PerformAuthenticationStepOneSendOtpTool(BaseTool):
@@ -48,6 +48,9 @@ class PerformAuthenticationStepOneSendOtpTool(BaseTool):
     async def call_tool(
         self, request: SendOtpToolRequest, agent=None, messages=None, **kw
     ) -> SendOtpToolResponse:
+        # TODO: Detect & convert words to number in request.social_id
+        # (example "one two three seven" -> "1237")
+
         # TODO: validate social id
         cred = await self.auth_controller.send_otp_to_user_id(request.social_id)
         return SendOtpToolResponse(authentication_session_id=cred.session_id, send_otp_status="OTP Sent")
@@ -58,7 +61,7 @@ class PerformAuthenticationStepTwoValidateOtpTool(BaseTool):
     This tool can perform step two of authentication, which is to validate the OTP,
     if authentication is not already successful.
     This can only be called if step one is completed.
-    Returns user_id only if authentication successful.
+    Returns authenticated_user_id only if authentication successful.
     The user is NOT aware of authentication_session_id.
     """
 
@@ -75,10 +78,11 @@ class PerformAuthenticationStepTwoValidateOtpTool(BaseTool):
     async def call_tool(
         self, request: ValidateOtpToolRequest, agent=None, messages=None, **kw
     ) -> ValidateOtpToolResponse:
+        # TODO: Detect & convert words to number in request.otp
         cred = self.auth_controller.get_credentials_from_session(request.authentication_session_id)
         if (not cred) or cred.otp != request.otp:
             return ValidateOtpToolResponse(authentication_status="Failed. OTP doesn't match")
         else:
             return ValidateOtpToolResponse(
-                user_id=cred.user_id, authentication_status="Successful. OTP matched."
+                authenticated_user_id=cred.user_id, authentication_status="Successful. OTP matched."
             )

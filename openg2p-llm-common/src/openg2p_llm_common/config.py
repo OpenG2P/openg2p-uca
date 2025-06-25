@@ -9,7 +9,7 @@ from . import __version__
 
 class OllamaOptions(BaseModel):
     model_config = ConfigDict(extra="allow")
-    temperature: int = 0
+    temperature: float = 0
 
 
 class Settings(BaseSettings):

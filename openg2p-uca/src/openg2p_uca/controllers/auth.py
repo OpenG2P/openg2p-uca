@@ -184,7 +184,7 @@ class AuthController(BaseAuthController):
         return int(partner_id) if partner_id else None
 
     async def get_id_type_id(self, id_type: str, session: AsyncSession = None) -> int | None:
-        if id_type in self._id_type_id_cache:
+        if self._id_type_id_cache.get(id_type) is not None:
             return self._id_type_id_cache[id_type]
         orig_session = session
         if not orig_session:
@@ -195,4 +195,4 @@ class AuthController(BaseAuthController):
         self._id_type_id_cache[id_type] = int(id_type_id) if id_type_id else None  # Cache the id_type_id
         if not orig_session:
             await session.close()
-        self._id_type_id_cache[id_type]
+        return self._id_type_id_cache[id_type]

@@ -149,8 +149,16 @@ class ParlerTTSService(BaseTTSService):
             return text
         text = text.replace("/", " or ")
         text = text.replace("+", " plus ")
+        text = text.replace("₹", "Rupees ")
         # numbers to words
-        text = re.sub(r"\d+", lambda x: num2words.num2words(x.group(0), lang="en_IN"), text)
+        text = re.sub(
+            r"\d+(?:,\d{3})*(?:\.\d+)?",
+            lambda x: num2words.num2words(float(x.group(0).replace(",", "")), lang="en_IN")
+            .replace(",", "")
+            .replace(".", "")
+            + " ",
+            text,
+        )
         # Clean up acronyms and camel case strings.
         text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)  # Handles "aB" -> "a B"
         text = re.sub(r"([A-Z])([A-Z][a-z])", r"\1 \2", text)  # Handles "ABCDefg" -> "AB CDefg"

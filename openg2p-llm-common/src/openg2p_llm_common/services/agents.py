@@ -193,7 +193,7 @@ class BaseAgentSystem(BaseService):
             auth_params.update({f"auth_{key}": val for key, val in user_profile.items()})
             auth_params.update(
                 {
-                    "auth_user_id_stmt": f'- ID: {auth_params.get("auth_user_id") or ""}',
+                    "auth_user_id_stmt": f'- authenticated_user_id: {auth_params.get("auth_user_id") or ""}',
                     "auth_profile_stmt": (
                         f'- Name: "{auth_params.get("auth_name") or ""}"\n'
                         f'- Date of birth: "{auth_params.get("auth_birthdate") or ""}"\n'

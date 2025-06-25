@@ -59,6 +59,13 @@ class Settings(AuthSettings, BaseSettings):
 
     main_agent_system_prompt_path: str = "system_prompts/main_agent.md"
 
+    tools_change_agent_enabled: bool = True
+    tools_authenticaton_enabled: bool = True
+    tools_program_info_enabled: bool = True
+    tools_get_beneficiary_id_enabled: bool = True
+    tools_grievance_create_enabled: bool = True
+    tools_grievance_status_enabled: bool = True
+
     default_system_prompt_suffix_for_call_path: str = "system_prompts/suffix_to_store_for_call.md"
     call_meta_ice_servers: list[dict[str, str]] = [{"urls": "stun:stun.l.google.com:19302"}]
     call_standby_message_path: str = "system_prompts/call_standby_message.md"
